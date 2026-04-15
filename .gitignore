@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+*.egg
+
+# Node / n8n-node
+n8n-node/node_modules/
+n8n-node/dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Env
+.env
+*.env
