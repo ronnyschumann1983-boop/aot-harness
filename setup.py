@@ -6,8 +6,8 @@ setup(
     install_requires=["anthropic>=0.40.0"],
     extras_require={"mcp": ["mcp>=1.0.0"]},
     python_requires=">=3.11",
-    author="Vera Schumann",
+    author="Ronny Schumann",
     description="Agent Harness with Atom of Thoughts (AoT) reasoning",
-    url="https://github.com/YOUR_USERNAME/aot-harness",
+    url="https://github.com/ronnyschumann1983-boop/aot-harness",
     license="MIT",
 )

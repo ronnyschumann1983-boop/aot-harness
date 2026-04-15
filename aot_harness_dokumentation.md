@@ -1,6 +1,6 @@
 # aot-harness — Vollständige Dokumentation
 ## CHIP + Atom of Thoughts + Harness Architecture
-**Version 0.2.0 | Vera Schumann | April 2026**
+**Version 0.2.1 | Ronny Schumann | April 2026**
 
 ---
 
@@ -451,6 +451,6 @@ aot-harness/
 
 ## Support & Weiterentwicklung
 
-- GitHub Issues: https://github.com/YOUR_USERNAME/aot-harness/issues
+- GitHub Issues: https://github.com/ronnyschumann1983-boop/aot-harness/issues
 - Basiert auf: arXiv:2502.12018 (AoT, MIT License)
-- CHIP-Architektur: Vera Schumann (2026)
+- CHIP-Architektur: Ronny Schumann (2026)

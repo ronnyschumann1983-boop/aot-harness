@@ -90,7 +90,7 @@ python -m aot_harness.examples.chip_idd_demo
 ## Basiert auf
 
 - **AoT Paper**: arXiv:2502.12018 (NeurIPS 2025) — MIT License
-- **CHIP-Architektur**: CLAUDE.md / AGENTS.md (Vera Schumann)
+- **CHIP-Architektur**: CLAUDE.md / AGENTS.md (Ronny Schumann)
 - **Harness-Konzept**: Anthropic Engineering, Martin Fowler (2026)
 
 ---
