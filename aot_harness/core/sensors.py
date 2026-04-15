@@ -21,12 +21,13 @@ class Sensor:
     """
 
     ERROR_PATTERNS = [
+        # Structural errors — only match in code/log context, not in prose
         (r"Traceback \(most recent call last\)",   "Python traceback detected"),
-        (r"Error:\s.+",                              "Explicit error message"),
-        (r"\bfailed\b",                             "Failure keyword"),
-        (r"\bexception\b",                          "Exception keyword"),
-        (r"\bnull\b|\bNone\b|\bundefined\b",   "Null/None value returned"),
-        (r"\b(404|500|502|503)\b",                 "HTTP error status code"),
+        (r'^Error:\s.+',                            "Explicit error message"),          # line-start only
+        (r'"error"\s*:\s*true',                     "JSON error flag"),                 # JSON {"error": true}
+        (r'\b(404|500|502|503)\b(?!\s*\w)',        "HTTP error status code"),
+        # Avoid false positives on "failed to mention", "None of the clients", etc.
+        (r'(?i)\b(FAILED|EXCEPTION)\b(?=\s*[:!\n])', "Failure/Exception keyword at sentence boundary"),
     ]
 
     SUCCESS_PATTERNS = [

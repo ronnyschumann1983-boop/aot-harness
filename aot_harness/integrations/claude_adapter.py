@@ -20,7 +20,7 @@ class ClaudeAdapter:
         self,
         api_key: str,
         model:   str  = DEFAULT_MODEL,
-        max_tokens: int = 2048,
+        max_tokens: int = 4096,
         system: str = "You are a precise, concise reasoning agent. Always respond in the requested format."
     ):
         try:

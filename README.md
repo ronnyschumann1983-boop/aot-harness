@@ -1,51 +1,51 @@
 # 🧠 aot-harness
 
-> **Agent = Model + Harness + CHIP** | AoT-powered, selbstlernendes Multi-Agent-System
+> **Agent = Model + Harness + CHIP** | AoT-powered, self-learning Multi-Agent System
 
-Kombiniert **Atom of Thoughts (AoT)** Reasoning mit der **CHIP-Architektur**:
-spezialisierte Subagenten, QA-Scoring und einem Obsidian-Vault der aus jedem Task lernt.
+Combines **Atom of Thoughts (AoT)** reasoning with the **CHIP architecture**:
+specialized sub-agents, QA scoring, and an Obsidian Vault that learns from every task.
 
 ---
 
-## Zwei Modi
+## Two Modes
 
-### 1. Einfacher Orchestrator (`Orchestrator`)
-AoT + Tool Execution + Sensor/Verifier Loop. Kein Vault, keine Spezialisten.
+### 1. Simple Orchestrator (`Orchestrator`)
+AoT + Tool Execution + Sensor/Verifier Loop. No Vault, no specialists.
 
 ```python
 from aot_harness.core import Orchestrator
 from aot_harness.integrations.claude_adapter import ClaudeAdapter
 
 orch = Orchestrator(llm_client=ClaudeAdapter(api_key="..."))
-result = orch.run("Analysiere die Top 3 CRM-Systeme")
+result = orch.run("Analyze the top 3 CRM systems")
 ```
 
-### 2. CHIP-Orchestrator (`CHIPOrchestrator`) — empfohlen
-AoT + CHIP: Vault-Check, Spezialisten, QA-Agent, Bibliothekarin.
+### 2. CHIP-Orchestrator (`CHIPOrchestrator`) — recommended
+AoT + CHIP: Vault-Check, specialists, QA-Agent, Librarian.
 
 ```python
 from aot_harness.core.chip_orchestrator import CHIPOrchestrator
 from aot_harness.integrations.obsidian_adapter import ObsidianVault
 
-vault = ObsidianVault(mcp_client=your_mcp)  # oder mock=True
+vault = ObsidianVault(mcp_client=your_mcp)  # or mock=True
 orch  = CHIPOrchestrator(llm_client=ClaudeAdapter(api_key="..."), vault=vault)
-result = orch.run("Erstelle IDD-Dokumentation für Kunde X")
+result = orch.run("Create IDD documentation for Client X")
 ```
 
 ---
 
-## Vollständiger Flow (CHIP-Modus)
+## Full Flow (CHIP Mode)
 
 ```
 User Goal
-  └─► Vault-Check (kb_search) → Cache-Hit? ──────────────── ja ──► QA ──► Output
-                                     │ nein
+  └─► Vault-Check (kb_search) → Cache-Hit? ──────────────── yes ──► QA ──► Output
+                                     │ no
                                      ▼
                            AoT Decomposition → AtomGraph
                                      │
                           ┌──────────┴──────────┐
                     [Research]            [Writing] [Analysis]
-                    Spezialist            Spezialist Spezialist
+                    Specialist            Specialist Specialist
                           └──────────┬──────────┘
                                Sensor + Verifier Loop
                                      │
@@ -53,48 +53,50 @@ User Goal
                                      │ Score < 0.75 → Retry
                                      │ Score ≥ 0.75
                                      ▼
-                                Output an User
+                                Output to User
                                      │
-                           Bibliothekarin (async)
+                           Librarian (async)
                                      ▼
-                            Obsidian Vault lernt
+                            Obsidian Vault learns
 ```
 
 ---
 
-## Architektur-Komponenten
+## Architecture Components
 
-| Komponente | Datei | Funktion |
+| Component | File | Function |
 |---|---|---|
-| CHIPOrchestrator | `core/chip_orchestrator.py` | Koordiniert alles |
-| AoTReasoner | `core/aot_reasoner.py` | Zerlegt Goals in AtomGraph |
-| Research/Writing/Analysis | `core/agents.py` | Spezialisierte Subagenten |
-| QAAgent | `core/agents.py` | Qualitätsprüfung (Score 0–1) |
-| Bibliothekarin | `core/agents.py` | Async Vault-Pflege |
-| Memory | `core/memory.py` | Session-Context mit AoT-Kompression |
+| CHIPOrchestrator | `core/chip_orchestrator.py` | Coordinates everything |
+| AoTReasoner | `core/aot_reasoner.py` | Decomposes goals into AtomGraph |
+| Research/Writing/Analysis | `core/agents.py` | Specialized sub-agents |
+| QAAgent | `core/agents.py` | Quality check (Score 0–1) |
+| Librarian | `core/agents.py` | Async Vault maintenance |
+| Memory | `core/memory.py` | Session context with AoT compression |
 | ObsidianVault | `integrations/obsidian_adapter.py` | kb_* MCP-Tools Wrapper |
 | ClaudeAdapter | `integrations/claude_adapter.py` | Anthropic SDK |
 | n8n Webhook | `integrations/n8n_webhook.py` | POST /run Endpoint |
 
 ---
 
-## Quick Start Demo
+## Quick Start
 
 ```bash
-pip install anthropic
+git clone https://github.com/ronnyschumann1983-boop/aot-harness
+cd aot-harness
+pip install -r requirements.txt
 python -m aot_harness.examples.chip_idd_demo
 ```
 
 ---
 
-## Basiert auf
+## Based on
 
 - **AoT Paper**: arXiv:2502.12018 (NeurIPS 2025) — MIT License
-- **CHIP-Architektur**: CLAUDE.md / AGENTS.md (Ronny Schumann)
-- **Harness-Konzept**: Anthropic Engineering, Martin Fowler (2026)
+- **CHIP Architecture**: CLAUDE.md / AGENTS.md (Ronny Schumann)
+- **Harness Concept**: Anthropic Engineering, Martin Fowler (2026)
 
 ---
 
-## Lizenz
+## License
 
 MIT

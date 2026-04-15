@@ -156,7 +156,8 @@ class QAResult:
     qa_score:      float
     bestanden:     bool
     anmerkungen:   list[str]
-    zurueck_an:    str | None = None   # "writing" | "research" | "analysis" | None
+    zurueck_an:    str | None        = None   # "writing" | "research" | "analysis" | None
+    retry_atom_ids: list[str]        = field(default_factory=list)  # specific atom IDs to retry
 
 
 class QAAgent:
@@ -165,7 +166,7 @@ Prüfe ob der Output den Original-Task vollständig erfüllt.
 
 Original-Task: {original_task}
 
-Spezialisten-Outputs:
+Spezialisten-Outputs (mit Atom-IDs):
 {spezialisten_outputs}
 
 Prüfe:
@@ -180,17 +181,21 @@ Antworte NUR mit gültigem JSON:
   "qa_score": 0.0-1.0,
   "bestanden": true/false,
   "anmerkungen": ["...", "..."],
-  "zurueck_an": null
+  "zurueck_an": null,
+  "retry_atom_ids": []
 }}
 
-Regel: qa_score < 0.75 → bestanden=false, zurueck_an = der schlechteste Agent
+Regel: qa_score < 0.75 → bestanden=false, zurueck_an = der schlechteste Agent-Typ,
+retry_atom_ids = Liste der Atom-IDs die konkret nachgebessert werden müssen (nicht alle!).
 Füge NIEMALS eigene Fakten hinzu. Schreibe NICHTS in den Vault."""
 
     def __init__(self, llm_client):
         self.llm = llm_client
 
     def run(self, original_task: str, outputs: dict[str, AgentOutput]) -> QAResult:
-        outputs_dict = {k: v.result for k, v in outputs.items()}
+        # Include atom IDs in output so QA can reference them directly
+        outputs_dict = {k: {"atom_id": k, "agent": v.agent, **v.result}
+                        for k, v in outputs.items()}
         prompt = self.PROMPT.format(
             original_task=original_task,
             spezialisten_outputs=json.dumps(outputs_dict, indent=2, ensure_ascii=False)
@@ -200,13 +205,15 @@ Füge NIEMALS eigene Fakten hinzu. Schreibe NICHTS in den Vault."""
             data = json.loads(raw)
         except Exception:
             data = {"final_output": str(outputs_dict), "qa_score": 0.6,
-                    "bestanden": False, "anmerkungen": ["JSON parse error"], "zurueck_an": None}
+                    "bestanden": False, "anmerkungen": ["JSON parse error"],
+                    "zurueck_an": None, "retry_atom_ids": []}
         return QAResult(
             final_output=data.get("final_output", ""),
             qa_score=data.get("qa_score", 0.0),
             bestanden=data.get("bestanden", False),
             anmerkungen=data.get("anmerkungen", []),
-            zurueck_an=data.get("zurueck_an")
+            zurueck_an=data.get("zurueck_an"),
+            retry_atom_ids=data.get("retry_atom_ids", []),
         )
 
 

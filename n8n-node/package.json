@@ -1,24 +1,40 @@
 {
   "name": "n8n-nodes-aot-harness",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "CHIP + Atom of Thoughts (AoT) Agent Harness — nativer n8n Community Node",
-  "keywords": ["n8n-community-node-package", "n8n", "aot", "chip", "ai-agent", "claude", "harness"],
+  "keywords": [
+    "n8n-community-node-package",
+    "n8n",
+    "aot",
+    "chip",
+    "ai-agent",
+    "claude",
+    "harness"
+  ],
   "license": "MIT",
-  "author": { "name": "Ronny Schumann" },
+  "author": {
+    "name": "Ronny Schumann"
+  },
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "dev":   "tsc --watch"
+    "dev": "tsc --watch"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "n8n": {
     "n8nNodesApiVersion": 1,
-    "credentials": ["dist/credentials/AotHarnessApi.credentials.js"],
-    "nodes":       ["dist/nodes/AotHarness/AotHarness.node.js"]
+    "credentials": [
+      "dist/credentials/AotHarnessApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/AotHarness/AotHarness.node.js"
+    ]
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "n8n-workflow": "*",
-    "typescript":  "^5.0.0"
+    "typescript": "^5.0.0"
   }
 }

@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 setup(
     name="aot-harness",
-    version="0.1.0",
+    version="0.2.2",
     packages=find_packages(),
     install_requires=["anthropic>=0.40.0"],
     extras_require={"mcp": ["mcp>=1.0.0"]},

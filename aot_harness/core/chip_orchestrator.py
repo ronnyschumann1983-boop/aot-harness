@@ -136,11 +136,19 @@ class CHIPOrchestrator:
             if qa.zurueck_an:
                 self._log(f"   ↩️  Zurück an: {qa.zurueck_an} (Loop {qa_loops+1})")
                 self.memory.add("system", f"QA-Feedback: {', '.join(qa.anmerkungen)}")
-                # Betroffene Atoms zurücksetzen
-                for atom in graph.atoms.values():
-                    if _detect_specialist(atom.question) == qa.zurueck_an:
-                        atom.status = AtomStatus.PENDING
-                        atom.result = None
+                # Nur die spezifischen Atom-IDs zurücksetzen die QA benannt hat.
+                # Fallback: alle Atoms des Agent-Typs (altes Verhalten) wenn keine IDs.
+                if qa.retry_atom_ids:
+                    for atom_id in qa.retry_atom_ids:
+                        if atom_id in graph.atoms:
+                            graph.atoms[atom_id].status = AtomStatus.PENDING
+                            graph.atoms[atom_id].result = None
+                            self._log(f"   🔄 Reset atom {atom_id}")
+                else:
+                    for atom in graph.atoms.values():
+                        if _detect_specialist(atom.question) == qa.zurueck_an:
+                            atom.status = AtomStatus.PENDING
+                            atom.result = None
             qa_loops += 1
 
         # ── Schritt 5: Output + Bibliothekarin async ───────────────────────

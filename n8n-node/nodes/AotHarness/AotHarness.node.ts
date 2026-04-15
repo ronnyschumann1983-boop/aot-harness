@@ -182,9 +182,11 @@ export class AotHarness implements INodeType {
           const ready = readyAtoms(graph);
           if (!ready.length) break;
 
-          for (const atom of ready) {
-            atom.status = 'running';
-            const ctx = compressedContext(graph);
+          // Snapshot context before parallel execution (all ready atoms share same dep-context)
+          const ctx = compressedContext(graph);
+          for (const atom of ready) atom.status = 'running';
+
+          await Promise.all(ready.map(async (atom) => {
             try {
               const raw    = await callClaude(SOLVE_PROMPT(goal, atom.question, ctx, language));
               atom.result  = raw;
@@ -193,7 +195,7 @@ export class AotHarness implements INodeType {
             } catch {
               atom.status = 'failed';
             }
-          }
+          }));
         }
 
         // ── QA — mit optionalem Retry ─────────────────────────────────────
