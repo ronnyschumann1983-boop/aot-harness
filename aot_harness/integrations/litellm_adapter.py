@@ -15,6 +15,7 @@ Install: pip install litellm>=1.50.0
 from __future__ import annotations
 from typing import Literal, Any
 import os
+import threading
 
 
 Provider = Literal["anthropic", "openai", "google", "mistral", "openrouter"]
@@ -88,8 +89,13 @@ class LiteLLMAdapter:
         self.extra        = extra or {}
 
         # Track cumulative cost per provider — read via .cost_summary()
+        # Aggregate counters guarded by lock for thread-safety (parallel atoms).
         self._cost_by_provider: dict[str, float] = {}
         self._tokens_by_provider: dict[str, dict[str, int]] = {}
+        self._aggregate_lock = threading.Lock()
+        # Last-call cost is THREAD-LOCAL: parallel atoms each see their own latest call,
+        # not whatever the most-recent thread happened to overwrite.
+        self._tls = threading.local()
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -155,9 +161,22 @@ class LiteLLMAdapter:
         }
 
     def reset_cost(self) -> None:
-        """Reset cost tracking (e.g. between orchestrator runs)."""
-        self._cost_by_provider.clear()
-        self._tokens_by_provider.clear()
+        """Reset cost tracking (e.g. between orchestrator runs).
+        Resets the shared aggregates AND the calling thread's last-call slot."""
+        with self._aggregate_lock:
+            self._cost_by_provider.clear()
+            self._tokens_by_provider.clear()
+        self._tls.last_call = self._empty_call()
+
+    def last_call_info(self) -> dict:
+        """Cost + token usage of THIS THREAD's most recent .complete() call.
+        Thread-local — safe to read from parallel atom workers without races."""
+        return dict(getattr(self._tls, "last_call", None) or self._empty_call())
+
+    @staticmethod
+    def _empty_call() -> dict:
+        return {"cost": 0.0, "provider": None, "model": None,
+                "prompt_tokens": 0, "completion_tokens": 0}
 
     # ── Internal: provider-specific message building ──────────────────────────
 
@@ -199,13 +218,29 @@ class LiteLLMAdapter:
         except Exception:
             cost = 0.0
 
-        self._cost_by_provider[provider] = self._cost_by_provider.get(provider, 0.0) + cost
-
+        prompt_tokens = 0
+        completion_tokens = 0
         usage = getattr(response, "usage", None)
         if usage:
-            bucket = self._tokens_by_provider.setdefault(provider, {"prompt": 0, "completion": 0})
-            bucket["prompt"]     += getattr(usage, "prompt_tokens", 0) or 0
-            bucket["completion"] += getattr(usage, "completion_tokens", 0) or 0
+            prompt_tokens     = getattr(usage, "prompt_tokens", 0) or 0
+            completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+
+        # Aggregates: shared across threads, lock-guarded
+        with self._aggregate_lock:
+            self._cost_by_provider[provider] = self._cost_by_provider.get(provider, 0.0) + cost
+            if usage:
+                bucket = self._tokens_by_provider.setdefault(provider, {"prompt": 0, "completion": 0})
+                bucket["prompt"]     += prompt_tokens
+                bucket["completion"] += completion_tokens
+
+        # Thread-local last-call: each parallel atom worker sees its own data
+        self._tls.last_call = {
+            "cost":              cost,
+            "provider":          provider,
+            "model":             model,
+            "prompt_tokens":     prompt_tokens,
+            "completion_tokens": completion_tokens,
+        }
 
 
 # ── Convenience factory ───────────────────────────────────────────────────────

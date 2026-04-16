@@ -25,7 +25,45 @@ import {
   callLLM,
   resolveCredentials,
   LLMConfig,
+  LLMUsage,
 } from './llm.router';
+
+// ── Cost aggregator: tracks every LLM call within one node-execution item ────
+
+interface CostAggregate {
+  total_usd:   number;
+  total_calls: number;
+  prompt_tokens:     number;
+  completion_tokens: number;
+  by_provider: Record<string, { cost_usd: number; calls: number; prompt_tokens: number; completion_tokens: number }>;
+  by_model:    Record<string, { cost_usd: number; calls: number; prompt_tokens: number; completion_tokens: number }>;
+}
+
+function newCostAggregate(): CostAggregate {
+  return {
+    total_usd: 0, total_calls: 0, prompt_tokens: 0, completion_tokens: 0,
+    by_provider: {}, by_model: {},
+  };
+}
+
+function accumulate(agg: CostAggregate, cfg: LLMConfig, u: LLMUsage): void {
+  agg.total_usd         += u.cost_usd;
+  agg.total_calls       += 1;
+  agg.prompt_tokens     += u.prompt_tokens;
+  agg.completion_tokens += u.completion_tokens;
+  const p = agg.by_provider[cfg.provider] ??= { cost_usd: 0, calls: 0, prompt_tokens: 0, completion_tokens: 0 };
+  p.cost_usd += u.cost_usd; p.calls += 1; p.prompt_tokens += u.prompt_tokens; p.completion_tokens += u.completion_tokens;
+  const m = agg.by_model[cfg.model] ??= { cost_usd: 0, calls: 0, prompt_tokens: 0, completion_tokens: 0 };
+  m.cost_usd += u.cost_usd; m.calls += 1; m.prompt_tokens += u.prompt_tokens; m.completion_tokens += u.completion_tokens;
+}
+
+function roundCost(agg: CostAggregate): CostAggregate {
+  const r = (n: number) => Math.round(n * 1e6) / 1e6;
+  agg.total_usd = r(agg.total_usd);
+  for (const k of Object.keys(agg.by_provider)) agg.by_provider[k].cost_usd = r(agg.by_provider[k].cost_usd);
+  for (const k of Object.keys(agg.by_model))    agg.by_model[k].cost_usd    = r(agg.by_model[k].cost_usd);
+  return agg;
+}
 
 // ── UI helper: build display-options for per-provider model dropdown ─────────
 
@@ -293,6 +331,7 @@ export class AotHarness implements INodeType {
       }
 
       let harnessResult: HarnessResult;
+      const cost = newCostAggregate();
 
       // ── Webhook-Modus ──────────────────────────────────────────────────────
       if (mode === 'webhook') {
@@ -313,12 +352,16 @@ export class AotHarness implements INodeType {
           },
         });
         harnessResult = resp as HarnessResult;
+        // Webhook (Python server) reports its own cost — pass-through if present.
+        const pyCost = (resp as { cost?: { total_usd?: number; by_provider?: Record<string, number> } }).cost;
+        if (pyCost?.total_usd) cost.total_usd = pyCost.total_usd;
 
       } else {
         // ── AoT Decomposition (uses decomposer LLM in mixed mode, else executor) ────
-        const decomposeRaw  = await callLLM(this, decomposerConfig, DECOMPOSE_PROMPT(goal, language));
+        const decomposeRes  = await callLLM(this, decomposerConfig, DECOMPOSE_PROMPT(goal, language));
+        accumulate(cost, decomposerConfig, decomposeRes.usage);
         const decomposeData = parseJson<{ atoms: Array<{ id: string; question: string; depends_on: string[] }> }>(
-          decomposeRaw, { atoms: [] }
+          decomposeRes.text, { atoms: [] }
         );
 
         if (!decomposeData.atoms.length) {
@@ -343,16 +386,26 @@ export class AotHarness implements INodeType {
           const ctx = compressedContext(graph);
           for (const atom of ready) atom.status = 'running';
 
-          await Promise.all(ready.map(async (atom) => {
+          // Atoms run in parallel; collect results then mutate shared state
+          // serially to keep the cost aggregator race-free.
+          const atomResults = await Promise.all(ready.map(async (atom) => {
             try {
-              const raw    = await callLLM(this, executorConfig, SOLVE_PROMPT(goal, atom.question, ctx, language));
-              atom.result  = raw;
-              atom.status  = 'done';
-              specialistOutputs[atom.id] = raw;
+              const res = await callLLM(this, executorConfig, SOLVE_PROMPT(goal, atom.question, ctx, language));
+              return { atom, res, ok: true as const };
             } catch {
-              atom.status = 'failed';
+              return { atom, ok: false as const };
             }
           }));
+          for (const r of atomResults) {
+            if (r.ok) {
+              accumulate(cost, executorConfig, r.res.usage);
+              r.atom.result = r.res.text;
+              r.atom.status = 'done';
+              specialistOutputs[r.atom.id] = r.res.text;
+            } else {
+              r.atom.status = 'failed';
+            }
+          }
         }
 
         // ── QA (executor LLM, optional retry) ─────────────────────────────
@@ -361,12 +414,13 @@ export class AotHarness implements INodeType {
         let attempts = qaRetry ? 2 : 1;
 
         while (attempts > 0) {
-          const qaRaw = await callLLM(this, executorConfig, QA_PROMPT(goal, allOutputs, language, qaThreshold));
-          const parsed = parseJson<typeof qaData>(qaRaw, {
+          const qaRes = await callLLM(this, executorConfig, QA_PROMPT(goal, allOutputs, language, qaThreshold));
+          accumulate(cost, executorConfig, qaRes.usage);
+          const parsed = parseJson<typeof qaData>(qaRes.text, {
             final_output: allOutputs,
             qa_score:     0.5,
             bestanden:    false,
-            anmerkungen:  ['QA parse error — raw: ' + qaRaw.substring(0, 100)],
+            anmerkungen:  ['QA parse error — raw: ' + qaRes.text.substring(0, 100)],
           });
           qaData = parsed;
           if (qaData.bestanden || !qaRetry) break;
@@ -399,6 +453,7 @@ export class AotHarness implements INodeType {
           model_used:              executorConfig.model,
           decomposer_provider_used: enableMixedMode ? decomposerConfig.provider : undefined,
           decomposer_model_used:    enableMixedMode ? decomposerConfig.model    : undefined,
+          cost: roundCost(cost),
         },
       });
     }

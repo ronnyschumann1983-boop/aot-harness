@@ -1,0 +1,98 @@
+{
+  "name": "AoT Harness — Mixed-Provider Cost Saver Demo",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "trigger-1",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "provider": "anthropic",
+        "model": "claude-sonnet-4-5",
+        "goal": "Erstelle eine kurze IDD-Dokumentation (Beratungsprotokoll) fuer einen Kunden, 42 Jahre, sucht private Haftpflichtversicherung. Beratungsanlass: Auszug aus Elternhaus, jetzt eigener Hausstand.",
+        "mode": "chip",
+        "enableMixedMode": false,
+        "advanced": {
+          "qaThreshold": 0.75,
+          "maxAtoms": 6,
+          "maxTokens": 1500,
+          "qaRetry": true,
+          "language": "de"
+        }
+      },
+      "id": "aot-baseline",
+      "name": "Run A — Single (Anthropic only)",
+      "type": "n8n-nodes-aot-harness.aotHarness",
+      "typeVersion": 1,
+      "position": [520, 180],
+      "credentials": {
+        "anthropicAotApi": { "id": "1", "name": "AoT Harness — Anthropic" }
+      }
+    },
+    {
+      "parameters": {
+        "provider": "google",
+        "model": "gemini-2.0-flash",
+        "goal": "Erstelle eine kurze IDD-Dokumentation (Beratungsprotokoll) fuer einen Kunden, 42 Jahre, sucht private Haftpflichtversicherung. Beratungsanlass: Auszug aus Elternhaus, jetzt eigener Hausstand.",
+        "mode": "chip",
+        "enableMixedMode": true,
+        "decomposerProvider": "anthropic",
+        "decomposerModel": "claude-sonnet-4-5",
+        "advanced": {
+          "qaThreshold": 0.75,
+          "maxAtoms": 6,
+          "maxTokens": 1500,
+          "qaRetry": true,
+          "language": "de"
+        }
+      },
+      "id": "aot-mixed",
+      "name": "Run B — Mixed (Anth decompose + Gemini execute)",
+      "type": "n8n-nodes-aot-harness.aotHarness",
+      "typeVersion": 1,
+      "position": [520, 420],
+      "credentials": {
+        "anthropicAotApi":     { "id": "1", "name": "AoT Harness — Anthropic" },
+        "googleGeminiAotApi":  { "id": "2", "name": "AoT Harness — Google Gemini" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compare the two AoT-Harness runs and report the savings.\n// Inputs: item 0 = single-provider run, item 1 = mixed-provider run.\nconst single = $input.first().json;\nconst mixed  = $input.last().json;\n\nconst costA = single.cost?.total_usd ?? 0;\nconst costB = mixed.cost?.total_usd  ?? 0;\nconst savingPct = costA > 0 ? ((costA - costB) / costA) * 100 : 0;\nconst savedUsd  = costA - costB;\n\nreturn [{ json: {\n  goal: single.goal,\n  run_a_single: {\n    provider: single.provider_used,\n    model:    single.model_used,\n    cost_usd: costA,\n    qa_score: single.qa_score,\n    success:  single.success,\n  },\n  run_b_mixed: {\n    decomposer: `${mixed.decomposer_provider_used}/${mixed.decomposer_model_used}`,\n    executor:   `${mixed.provider_used}/${mixed.model_used}`,\n    cost_usd:   costB,\n    qa_score:   mixed.qa_score,\n    success:    mixed.success,\n  },\n  comparison: {\n    saved_usd_per_run:    Number(savedUsd.toFixed(6)),\n    saved_pct:            Number(savingPct.toFixed(1)),\n    annualized_1k_per_mo: Number((savedUsd * 12000).toFixed(2)),\n  },\n} }];"
+      },
+      "id": "compare",
+      "name": "Cost Comparison",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [820, 300]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [[
+        { "node": "Run A — Single (Anthropic only)", "type": "main", "index": 0 },
+        { "node": "Run B — Mixed (Anth decompose + Gemini execute)", "type": "main", "index": 0 }
+      ]]
+    },
+    "Run A — Single (Anthropic only)": {
+      "main": [[ { "node": "Cost Comparison", "type": "main", "index": 0 } ]]
+    },
+    "Run B — Mixed (Anth decompose + Gemini execute)": {
+      "main": [[ { "node": "Cost Comparison", "type": "main", "index": 0 } ]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": [
+    { "name": "demo" },
+    { "name": "aot-harness" },
+    { "name": "v0.3.0" }
+  ],
+  "meta": {
+    "description": "Compares single-provider (Anthropic Sonnet) vs mixed-provider (Anthropic decomposer + Gemini Flash executor) for the same goal. Expected savings: 60-80%. Requires both Anthropic and Google Gemini credentials configured."
+  }
+}

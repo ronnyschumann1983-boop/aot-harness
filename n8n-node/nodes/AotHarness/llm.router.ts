@@ -5,8 +5,57 @@
  * Supports: anthropic, openai, google, mistral, openrouter
  *
  * Backward-compat: legacy `aotHarnessApi` credential maps to anthropic.
+ *
+ * v0.3 — every call returns { text, usage } so the node can aggregate
+ * per-atom cost in TypeScript without a Python round-trip.
  */
 import { IExecuteFunctions } from 'n8n-workflow';
+
+export interface LLMUsage {
+  prompt_tokens:     number;
+  completion_tokens: number;
+  cost_usd:          number;
+}
+
+export interface LLMResult {
+  text:  string;
+  usage: LLMUsage;
+}
+
+/** Pricing per 1M tokens [input, output] in USD. Updated April 2026. */
+export const PRICING_PER_1M: Record<string, [number, number]> = {
+  // Anthropic
+  'claude-opus-4-5':       [15.00, 75.00],
+  'claude-sonnet-4-5':     [ 3.00, 15.00],
+  'claude-haiku-3-5':      [ 0.80,  4.00],
+  // OpenAI
+  'gpt-4o':                [ 2.50, 10.00],
+  'gpt-4o-mini':           [ 0.15,  0.60],
+  'o1':                    [15.00, 60.00],
+  'o1-mini':               [ 3.00, 12.00],
+  // Google Gemini
+  'gemini-2.0-flash':      [ 0.10,  0.40],
+  'gemini-1.5-pro':        [ 1.25,  5.00],
+  'gemini-1.5-flash':      [ 0.075, 0.30],
+  // Mistral
+  'mistral-large-latest':  [ 2.00,  6.00],
+  'mistral-small-latest':  [ 0.20,  0.60],
+  'codestral-latest':      [ 0.20,  0.60],
+  // OpenRouter (strip provider prefix and lookup base model)
+  'anthropic/claude-opus-4-5':   [15.00, 75.00],
+  'anthropic/claude-sonnet-4-5': [ 3.00, 15.00],
+  'openai/gpt-4o':               [ 2.50, 10.00],
+  'google/gemini-2.0-flash':     [ 0.10,  0.40],
+  'deepseek/deepseek-chat':      [ 0.14,  0.28],
+  'meta-llama/llama-3.3-70b-instruct': [ 0.30,  0.50],
+  'qwen/qwen-2.5-72b-instruct':  [ 0.40,  0.80],
+};
+
+function calcCost(model: string, promptTokens: number, completionTokens: number): number {
+  const rate = PRICING_PER_1M[model];
+  if (!rate) return 0;
+  return (promptTokens / 1_000_000) * rate[0] + (completionTokens / 1_000_000) * rate[1];
+}
 
 export type ProviderId = 'anthropic' | 'openai' | 'google' | 'mistral' | 'openrouter';
 
@@ -75,13 +124,13 @@ export interface LLMConfig {
 }
 
 /**
- * Send a prompt to any of the 5 providers. Returns the response text.
+ * Send a prompt to any of the 5 providers. Returns text + usage (tokens + cost_usd).
  */
 export async function callLLM(
   ctx:    IExecuteFunctions,
   config: LLMConfig,
   prompt: string,
-): Promise<string> {
+): Promise<LLMResult> {
   switch (config.provider) {
     case 'anthropic':  return callAnthropic(ctx, config, prompt);
     case 'openai':     return callOpenAI(ctx, config, prompt);
@@ -93,9 +142,18 @@ export async function callLLM(
   }
 }
 
+/** Convenience: callLLM but return only the text (legacy callers). */
+export async function callLLMText(
+  ctx:    IExecuteFunctions,
+  config: LLMConfig,
+  prompt: string,
+): Promise<string> {
+  return (await callLLM(ctx, config, prompt)).text;
+}
+
 // ── Anthropic ────────────────────────────────────────────────────────────────
 
-async function callAnthropic(ctx: IExecuteFunctions, c: LLMConfig, prompt: string): Promise<string> {
+async function callAnthropic(ctx: IExecuteFunctions, c: LLMConfig, prompt: string): Promise<LLMResult> {
   const resp = await ctx.helpers.request({
     method: 'POST',
     url:    'https://api.anthropic.com/v1/messages',
@@ -112,12 +170,20 @@ async function callAnthropic(ctx: IExecuteFunctions, c: LLMConfig, prompt: strin
       messages:   [{ role: 'user', content: prompt }],
     },
   });
-  return (resp as { content: Array<{ text: string }> }).content[0].text.trim();
+  type AnthroResp = {
+    content: Array<{ text: string }>;
+    usage?:  { input_tokens?: number; output_tokens?: number };
+  };
+  const r = resp as AnthroResp;
+  const text = r.content[0].text.trim();
+  const pt   = r.usage?.input_tokens  ?? 0;
+  const ct   = r.usage?.output_tokens ?? 0;
+  return { text, usage: { prompt_tokens: pt, completion_tokens: ct, cost_usd: calcCost(c.model, pt, ct) } };
 }
 
 // ── OpenAI ───────────────────────────────────────────────────────────────────
 
-async function callOpenAI(ctx: IExecuteFunctions, c: LLMConfig, prompt: string): Promise<string> {
+async function callOpenAI(ctx: IExecuteFunctions, c: LLMConfig, prompt: string): Promise<LLMResult> {
   const headers: Record<string, string> = {
     'Authorization': `Bearer ${c.apiKey}`,
     'Content-Type':  'application/json',
@@ -138,12 +204,20 @@ async function callOpenAI(ctx: IExecuteFunctions, c: LLMConfig, prompt: string):
       ],
     },
   });
-  return (resp as { choices: Array<{ message: { content: string } }> }).choices[0].message.content.trim();
+  type OpenAIResp = {
+    choices: Array<{ message: { content: string } }>;
+    usage?:  { prompt_tokens?: number; completion_tokens?: number };
+  };
+  const r = resp as OpenAIResp;
+  const text = r.choices[0].message.content.trim();
+  const pt   = r.usage?.prompt_tokens     ?? 0;
+  const ct   = r.usage?.completion_tokens ?? 0;
+  return { text, usage: { prompt_tokens: pt, completion_tokens: ct, cost_usd: calcCost(c.model, pt, ct) } };
 }
 
 // ── Google Gemini ────────────────────────────────────────────────────────────
 
-async function callGoogle(ctx: IExecuteFunctions, c: LLMConfig, prompt: string): Promise<string> {
+async function callGoogle(ctx: IExecuteFunctions, c: LLMConfig, prompt: string): Promise<LLMResult> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(c.model)}:generateContent?key=${encodeURIComponent(c.apiKey)}`;
   const resp = await ctx.helpers.request({
     method: 'POST',
@@ -156,13 +230,20 @@ async function callGoogle(ctx: IExecuteFunctions, c: LLMConfig, prompt: string):
       generationConfig: { maxOutputTokens: c.maxTokens },
     },
   });
-  type GoogleResp = { candidates: Array<{ content: { parts: Array<{ text: string }> } }> };
-  return (resp as GoogleResp).candidates[0].content.parts[0].text.trim();
+  type GoogleResp = {
+    candidates: Array<{ content: { parts: Array<{ text: string }> } }>;
+    usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+  };
+  const r = resp as GoogleResp;
+  const text = r.candidates[0].content.parts[0].text.trim();
+  const pt   = r.usageMetadata?.promptTokenCount     ?? 0;
+  const ct   = r.usageMetadata?.candidatesTokenCount ?? 0;
+  return { text, usage: { prompt_tokens: pt, completion_tokens: ct, cost_usd: calcCost(c.model, pt, ct) } };
 }
 
 // ── Mistral ──────────────────────────────────────────────────────────────────
 
-async function callMistral(ctx: IExecuteFunctions, c: LLMConfig, prompt: string): Promise<string> {
+async function callMistral(ctx: IExecuteFunctions, c: LLMConfig, prompt: string): Promise<LLMResult> {
   const resp = await ctx.helpers.request({
     method: 'POST',
     url:    'https://api.mistral.ai/v1/chat/completions',
@@ -180,12 +261,20 @@ async function callMistral(ctx: IExecuteFunctions, c: LLMConfig, prompt: string)
       ],
     },
   });
-  return (resp as { choices: Array<{ message: { content: string } }> }).choices[0].message.content.trim();
+  type MistralResp = {
+    choices: Array<{ message: { content: string } }>;
+    usage?:  { prompt_tokens?: number; completion_tokens?: number };
+  };
+  const r = resp as MistralResp;
+  const text = r.choices[0].message.content.trim();
+  const pt   = r.usage?.prompt_tokens     ?? 0;
+  const ct   = r.usage?.completion_tokens ?? 0;
+  return { text, usage: { prompt_tokens: pt, completion_tokens: ct, cost_usd: calcCost(c.model, pt, ct) } };
 }
 
 // ── OpenRouter (meta-provider) ───────────────────────────────────────────────
 
-async function callOpenRouter(ctx: IExecuteFunctions, c: LLMConfig, prompt: string): Promise<string> {
+async function callOpenRouter(ctx: IExecuteFunctions, c: LLMConfig, prompt: string): Promise<LLMResult> {
   const headers: Record<string, string> = {
     'Authorization': `Bearer ${c.apiKey}`,
     'Content-Type':  'application/json',
@@ -207,7 +296,15 @@ async function callOpenRouter(ctx: IExecuteFunctions, c: LLMConfig, prompt: stri
       ],
     },
   });
-  return (resp as { choices: Array<{ message: { content: string } }> }).choices[0].message.content.trim();
+  type ORResp = {
+    choices: Array<{ message: { content: string } }>;
+    usage?:  { prompt_tokens?: number; completion_tokens?: number };
+  };
+  const r = resp as ORResp;
+  const text = r.choices[0].message.content.trim();
+  const pt   = r.usage?.prompt_tokens     ?? 0;
+  const ct   = r.usage?.completion_tokens ?? 0;
+  return { text, usage: { prompt_tokens: pt, completion_tokens: ct, cost_usd: calcCost(c.model, pt, ct) } };
 }
 
 /**

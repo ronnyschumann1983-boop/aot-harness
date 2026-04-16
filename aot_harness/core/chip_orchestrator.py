@@ -276,6 +276,7 @@ class CHIPOrchestrator:
                 with lock:
                     outputs[specialist] = out
                 self.memory.store_atom_result(atom.id, raw_output)
+                self._log_atom_cost(atom.id)
                 break
             elif verdict["action"] == "retry":
                 attempt += 1
@@ -352,3 +353,16 @@ class CHIPOrchestrator:
         if self.verbose:
             print(msg)
         logger.info(msg)
+
+    def _log_atom_cost(self, atom_id: str) -> None:
+        """Log cost of the most recent LLM call for the given atom (executor-side)."""
+        if not hasattr(self.llm, "last_call_info"):
+            return
+        info = self.llm.last_call_info()
+        if info.get("cost", 0) <= 0 and info.get("prompt_tokens", 0) <= 0:
+            return
+        cost     = info.get("cost", 0.0)
+        model    = info.get("model", "?")
+        ptokens  = info.get("prompt_tokens", 0)
+        ctokens  = info.get("completion_tokens", 0)
+        self._log(f"   💰 [{atom_id}] {model}: ${cost:.4f} ({ptokens}+{ctokens} tok)")
