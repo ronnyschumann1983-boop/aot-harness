@@ -66,28 +66,65 @@ class CHIPOrchestrator:
         self,
         llm_client,
         vault=None,
-        tools:        ToolRegistry | None = None,
-        session_id:   str                  = "chip-default",
-        max_retries:  int                  = 3,
-        max_qa_loops: int                  = 2,
-        persist_path: str | None           = None,
-        verbose:      bool                 = True,
+        tools:           ToolRegistry | None = None,
+        session_id:      str                  = "chip-default",
+        max_retries:     int                  = 3,
+        max_qa_loops:    int                  = 2,
+        persist_path:    str | None           = None,
+        verbose:         bool                 = True,
+        decomposer_llm:  Any                  = None,   # v0.3.0 — Mixed-Provider Mode
     ):
-        self.llm          = llm_client
-        self.vault        = vault
-        self.reasoner     = AoTReasoner(llm_client)
-        self.memory       = Memory(session_id, persist_path=persist_path)
-        self.tools        = tools or get_default_registry()
-        self.sensor       = Sensor()
-        self.verifier     = Verifier(max_retries=max_retries)
-        self.qa_agent     = QAAgent(llm_client)
-        self.bibliothek   = Bibliothekarin(llm_client, vault) if vault else None
-        self.verbose      = verbose
-        self.max_qa_loops = max_qa_loops
+        """
+        v0.3.0 Multi-Provider Support:
+          - llm_client     : the executor LLM (used by all atom-solving agents + QA)
+          - decomposer_llm : optional separate LLM for AoT decomposition
+                             (e.g. Claude Sonnet for quality decomposition,
+                             Gemini Flash for cheap execution → 70-80% cost saving)
+          - If decomposer_llm is None → llm_client is used for both phases
+            (single-provider mode, fully backward-compatible).
+        """
+        self.llm            = llm_client
+        self.decomposer_llm = decomposer_llm or llm_client
+        self.vault          = vault
+        self.reasoner       = AoTReasoner(self.decomposer_llm)
+        self.memory         = Memory(session_id, persist_path=persist_path)
+        self.tools          = tools or get_default_registry()
+        self.sensor         = Sensor()
+        self.verifier       = Verifier(max_retries=max_retries)
+        self.qa_agent       = QAAgent(llm_client)
+        self.bibliothek     = Bibliothekarin(llm_client, vault) if vault else None
+        self.verbose        = verbose
+        self.max_qa_loops   = max_qa_loops
 
         self.research_agent = ResearchAgent(llm_client, vault)
         self.writing_agent  = WritingAgent(llm_client, vault)
         self.analysis_agent = AnalysisAgent(llm_client, vault)
+
+    # ── Convenience constructors (v0.3.0) ─────────────────────────────────────
+
+    @classmethod
+    def from_provider(cls, provider: str = "anthropic", model: str | None = None,
+                      api_key: str | None = None, **kwargs):
+        """Single-provider factory: spin up an orchestrator on one provider."""
+        from ..integrations.litellm_adapter import LiteLLMAdapter
+        llm = LiteLLMAdapter(provider=provider, model=model, api_key=api_key)
+        return cls(llm_client=llm, **kwargs)
+
+    @classmethod
+    def from_mixed(cls,
+                   executor_provider:   str = "google",
+                   executor_model:      str | None = None,
+                   decomposer_provider: str = "anthropic",
+                   decomposer_model:    str | None = None,
+                   **kwargs):
+        """
+        Mixed-Provider factory: cheap fast executor + smart decomposer.
+        Default: Gemini Flash executes, Claude Sonnet decomposes (~75% cost saving).
+        """
+        from ..integrations.litellm_adapter import LiteLLMAdapter
+        executor   = LiteLLMAdapter(provider=executor_provider,   model=executor_model)
+        decomposer = LiteLLMAdapter(provider=decomposer_provider, model=decomposer_model)
+        return cls(llm_client=executor, decomposer_llm=decomposer, **kwargs)
 
     # ── Haupt-Einstiegspunkt ──────────────────────────────────────────────────
 
@@ -265,6 +302,12 @@ class CHIPOrchestrator:
     def _finalize(self, goal: str, qa: QAResult, atoms_used: list[str],
                   cache_hit: bool = False) -> dict:
         self._log(f"\n{'✅' if qa.bestanden else '⚠️ '} Final | Score: {qa.qa_score:.2f}")
+
+        cost = self._collect_cost_summary()
+        if cost["total_usd"] > 0:
+            self._log(f"💰 Cost: ${cost['total_usd']:.4f} USD | "
+                      + ", ".join(f"{p}=${c:.4f}" for p, c in cost["by_provider"].items()))
+
         return {
             "goal":       goal,
             "result":     qa.final_output,
@@ -273,6 +316,36 @@ class CHIPOrchestrator:
             "atoms_used": atoms_used,
             "cache_hit":  cache_hit,
             "notes":      qa.anmerkungen,
+            "cost":       cost,
+        }
+
+    def _collect_cost_summary(self) -> dict:
+        """
+        Aggregate cost across executor + decomposer LLMs.
+        Only LiteLLMAdapter instances expose cost_summary(); others contribute zero.
+        """
+        total_usd = 0.0
+        by_provider: dict[str, float] = {}
+        tokens: dict[str, dict] = {}
+
+        for label, llm in [("executor", self.llm), ("decomposer", self.decomposer_llm)]:
+            if llm is None or not hasattr(llm, "cost_summary"):
+                continue
+            if label == "decomposer" and llm is self.llm:
+                continue  # avoid double-counting in single-provider mode
+            summary = llm.cost_summary()
+            total_usd += summary.get("total_usd", 0.0)
+            for p, c in summary.get("by_provider", {}).items():
+                by_provider[p] = by_provider.get(p, 0.0) + c
+            for p, t in summary.get("tokens", {}).items():
+                bucket = tokens.setdefault(p, {"prompt": 0, "completion": 0})
+                bucket["prompt"]     += t.get("prompt", 0)
+                bucket["completion"] += t.get("completion", 0)
+
+        return {
+            "total_usd":   round(total_usd, 6),
+            "by_provider": {k: round(v, 6) for k, v in by_provider.items()},
+            "tokens":      tokens,
         }
 
     def _log(self, msg: str) -> None:

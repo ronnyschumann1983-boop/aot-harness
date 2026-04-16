@@ -29,6 +29,11 @@ class Atom:
     error:        str | None = None
     retry_count:  int        = 0
     max_retries:  int        = 2
+    # v0.3.0 — per-atom provider/model override.
+    # None → orchestrator default. Allows mixed-provider workflows
+    # (e.g. cheap Gemini Flash for execution, Claude Sonnet for decomposition).
+    provider:     str | None = None
+    model:        str | None = None
 
     def context_snapshot(self) -> dict:
         """Return only the compressed result — not the full reasoning chain."""
@@ -79,7 +84,8 @@ class AtomGraph:
             "atoms": {k: {
                 "id": v.id, "question": v.question,
                 "depends_on": v.depends_on, "status": v.status,
-                "result": v.result, "error": v.error
+                "result": v.result, "error": v.error,
+                "provider": v.provider, "model": v.model,
             } for k, v in self.atoms.items()}
         }
 
@@ -164,7 +170,9 @@ Your answer will be compressed and passed to dependent atoms."""
             graph.add(Atom(
                 id=item["id"],
                 question=item["question"],
-                depends_on=item.get("depends_on", [])
+                depends_on=item.get("depends_on", []),
+                provider=item.get("provider"),
+                model=item.get("model"),
             ))
         return graph
 
