@@ -83,7 +83,23 @@ User Goal
 
 ---
 
-## What's New in v0.2.2
+## What's New in v0.3.0 — Multi-Provider
+
+- 🌐 **5 LLM providers**: Anthropic, OpenAI, Google Gemini, **Mistral (EU/GDPR)**, OpenRouter
+- 🪙 **Mixed-Provider Mode** — separate decomposer (smart) + executor (cheap) → typical **60–80% cost saving** at comparable QA score
+- 💰 **Per-call cost tracking** — `cost_summary()` on the adapter, `cost.total_usd` + breakdown in n8n node output
+- 🇪🇺 **Mistral (la Plateforme)** — fully EU-hosted for GDPR-sensitive workflows
+- 🔌 **LiteLLM** under the hood — switch providers in one line:
+  ```python
+  CHIPOrchestrator.from_provider(provider="google", model="gemini-2.0-flash")
+  CHIPOrchestrator.from_mixed(decomposer_provider="anthropic", executor_provider="google")
+  ```
+- 🧪 **31 tests** covering provider routing, cost tracking, backward compat
+- 🪶 **n8n node v0.3.0** with provider dropdown + mixed-mode toggle (breaking change — see [n8n-node/README.md](n8n-node/README.md#migration-from-v02x))
+
+> Full Python demo: `python -m aot_harness.examples.mixed_provider_demo`
+
+### Previously in v0.2.2
 
 - ⚡ **Parallel Atoms** — independent atoms run concurrently via `Promise.all`: 2–3x faster
 - 📄 **max_tokens 4096** — no more truncation on long outputs
