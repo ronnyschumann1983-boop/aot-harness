@@ -35,6 +35,7 @@ from .agents        import (
     ResearchAgent, WritingAgent, AnalysisAgent,
     QAAgent, QAResult, Bibliothekarin, AgentInput, AgentOutput
 )
+from ..integrations.hitl import HITLNotifier, build_hitl_payload
 
 logger = logging.getLogger("chip_orchestrator")
 
@@ -73,6 +74,8 @@ class CHIPOrchestrator:
         persist_path:    str | None           = None,
         verbose:         bool                 = True,
         decomposer_llm:  Any                  = None,   # v0.3.0 — Mixed-Provider Mode
+        qa_threshold:    float                = 0.75,   # v0.4.0 — HITL gate threshold
+        hitl_notifier:   HITLNotifier | None  = None,   # v0.4.0 — Human-in-the-loop webhook
     ):
         """
         v0.3.0 Multi-Provider Support:
@@ -95,6 +98,8 @@ class CHIPOrchestrator:
         self.bibliothek     = Bibliothekarin(llm_client, vault) if vault else None
         self.verbose        = verbose
         self.max_qa_loops   = max_qa_loops
+        self.qa_threshold   = qa_threshold
+        self.hitl           = hitl_notifier
 
         self.research_agent = ResearchAgent(llm_client, vault)
         self.writing_agent  = WritingAgent(llm_client, vault)
@@ -190,6 +195,10 @@ class CHIPOrchestrator:
 
         # ── Schritt 5: Output + Bibliothekarin async ───────────────────────
         atoms_used = [a.id for a in graph.atoms.values() if a.status == AtomStatus.DONE]
+
+        # HITL gate: QA retries exhausted and still below threshold → notify operator
+        self._maybe_fire_hitl(goal, qa, atoms_used, attempts=qa_loops + 1)
+
         result = self._finalize(goal, qa, atoms_used)
 
         # Bibliothekarin startet async — blockiert NICHT
@@ -319,6 +328,27 @@ class CHIPOrchestrator:
             "notes":      qa.anmerkungen,
             "cost":       cost,
         }
+
+    def _maybe_fire_hitl(self, goal: str, qa: QAResult,
+                         atoms_used: list[str], *, attempts: int) -> None:
+        """Fire HITL webhook if QA failed after all retries. No-op if unconfigured."""
+        if self.hitl is None:
+            return
+        if qa.bestanden and qa.qa_score >= self.qa_threshold:
+            return
+
+        payload = build_hitl_payload(
+            goal         = goal,
+            qa_score     = qa.qa_score,
+            threshold    = self.qa_threshold,
+            attempts     = attempts,
+            anmerkungen  = qa.anmerkungen or [],
+            final_output = qa.final_output or "",
+            atoms_used   = atoms_used,
+            session_id   = self.memory.session_id,
+        )
+        self.hitl.notify(payload)
+        self._log(f"🚨 HITL webhook fired (score {qa.qa_score:.2f} < {self.qa_threshold:.2f})")
 
     def _collect_cost_summary(self) -> dict:
         """

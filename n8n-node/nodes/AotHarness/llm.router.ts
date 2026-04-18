@@ -25,9 +25,9 @@ export interface LLMResult {
 /** Pricing per 1M tokens [input, output] in USD. Updated April 2026. */
 export const PRICING_PER_1M: Record<string, [number, number]> = {
   // Anthropic
-  'claude-opus-4-5':       [15.00, 75.00],
-  'claude-sonnet-4-5':     [ 3.00, 15.00],
-  'claude-haiku-3-5':      [ 0.80,  4.00],
+  'claude-opus-4-7':             [15.00, 75.00],
+  'claude-sonnet-4-6':           [ 3.00, 15.00],
+  'claude-haiku-4-5-20251001':   [ 0.80,  4.00],
   // OpenAI
   'gpt-4o':                [ 2.50, 10.00],
   'gpt-4o-mini':           [ 0.15,  0.60],
@@ -42,8 +42,8 @@ export const PRICING_PER_1M: Record<string, [number, number]> = {
   'mistral-small-latest':  [ 0.20,  0.60],
   'codestral-latest':      [ 0.20,  0.60],
   // OpenRouter (strip provider prefix and lookup base model)
-  'anthropic/claude-opus-4-5':   [15.00, 75.00],
-  'anthropic/claude-sonnet-4-5': [ 3.00, 15.00],
+  'anthropic/claude-opus-4-7':   [15.00, 75.00],
+  'anthropic/claude-sonnet-4-6': [ 3.00, 15.00],
   'openai/gpt-4o':               [ 2.50, 10.00],
   'google/gemini-2.0-flash':     [ 0.10,  0.40],
   'deepseek/deepseek-chat':      [ 0.14,  0.28],
@@ -60,11 +60,11 @@ function calcCost(model: string, promptTokens: number, completionTokens: number)
 export type ProviderId = 'anthropic' | 'openai' | 'google' | 'mistral' | 'openrouter';
 
 export const DEFAULT_MODEL: Record<ProviderId, string> = {
-  anthropic:  'claude-sonnet-4-5',
+  anthropic:  'claude-sonnet-4-6',
   openai:     'gpt-4o',
   google:     'gemini-2.0-flash',
   mistral:    'mistral-large-latest',
-  openrouter: 'anthropic/claude-sonnet-4-5',
+  openrouter: 'anthropic/claude-sonnet-4-6',
 };
 
 export const CREDENTIAL_NAME: Record<ProviderId, string> = {
@@ -78,9 +78,9 @@ export const CREDENTIAL_NAME: Record<ProviderId, string> = {
 /** Curated model options per provider for the n8n UI dropdown. */
 export const MODEL_OPTIONS: Record<ProviderId, Array<{ name: string; value: string }>> = {
   anthropic: [
-    { name: 'Claude Opus 4.5 (highest quality)',    value: 'claude-opus-4-5' },
-    { name: 'Claude Sonnet 4.5 (recommended)',      value: 'claude-sonnet-4-5' },
-    { name: 'Claude Haiku 3.5 (fast + cheap)',      value: 'claude-haiku-3-5' },
+    { name: 'Claude Opus 4.7 (highest quality)',    value: 'claude-opus-4-7' },
+    { name: 'Claude Sonnet 4.6 (recommended)',      value: 'claude-sonnet-4-6' },
+    { name: 'Claude Haiku 4.5 (fast + cheap)',      value: 'claude-haiku-4-5-20251001' },
   ],
   openai: [
     { name: 'GPT-4o',          value: 'gpt-4o' },
@@ -99,7 +99,7 @@ export const MODEL_OPTIONS: Record<ProviderId, Array<{ name: string; value: stri
     { name: 'Codestral (EU)',      value: 'codestral-latest' },
   ],
   openrouter: [
-    { name: 'Claude Sonnet 4.5',    value: 'anthropic/claude-sonnet-4-5' },
+    { name: 'Claude Sonnet 4.6',    value: 'anthropic/claude-sonnet-4-6' },
     { name: 'GPT-4o',               value: 'openai/gpt-4o' },
     { name: 'Gemini 2.0 Flash',     value: 'google/gemini-2.0-flash' },
     { name: 'DeepSeek V3',          value: 'deepseek/deepseek-chat' },

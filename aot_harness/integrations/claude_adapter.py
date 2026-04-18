@@ -14,7 +14,7 @@ class ClaudeAdapter:
     Install: pip install anthropic>=0.40.0
     """
 
-    DEFAULT_MODEL = "claude-opus-4-6"
+    DEFAULT_MODEL = "claude-opus-4-7"
 
     def __init__(
         self,

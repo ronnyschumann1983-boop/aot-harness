@@ -12,7 +12,7 @@
     {
       "parameters": {
         "provider": "anthropic",
-        "model": "claude-sonnet-4-5",
+        "model": "claude-sonnet-4-6",
         "goal": "Erstelle eine kurze IDD-Dokumentation (Beratungsprotokoll) fuer einen Kunden, 42 Jahre, sucht private Haftpflichtversicherung. Beratungsanlass: Auszug aus Elternhaus, jetzt eigener Hausstand.",
         "mode": "chip",
         "enableMixedMode": false,
@@ -41,7 +41,7 @@
         "mode": "chip",
         "enableMixedMode": true,
         "decomposerProvider": "anthropic",
-        "decomposerModel": "claude-sonnet-4-5",
+        "decomposerModel": "claude-sonnet-4-6",
         "advanced": {
           "qaThreshold": 0.75,
           "maxAtoms": 6,

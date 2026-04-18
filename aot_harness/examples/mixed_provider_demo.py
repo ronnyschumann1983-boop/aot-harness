@@ -64,7 +64,7 @@ def main() -> int:
     # ── Run A: single-provider (Anthropic for everything) ───────────────────
     orch_single = CHIPOrchestrator.from_provider(
         provider="anthropic",
-        model="claude-sonnet-4-5",
+        model="claude-sonnet-4-6",
         verbose=False,  # suppress per-step logs to keep demo output readable
     )
     res_a = _run("RUN A — Single-provider (Anthropic Sonnet)", orch_single, GOAL)
@@ -74,7 +74,7 @@ def main() -> int:
         executor_provider="google",
         executor_model="gemini-2.0-flash",
         decomposer_provider="anthropic",
-        decomposer_model="claude-sonnet-4-5",
+        decomposer_model="claude-sonnet-4-6",
         verbose=False,
     )
     res_b = _run("RUN B — Mixed (Anthropic decomposer + Gemini Flash executor)",

@@ -38,7 +38,7 @@ Then add the credential(s) for the provider(s) you want to use:
 ## Quick Start
 
 1. Drop **AoT Harness** into a workflow.
-2. Pick a **Provider** (e.g. Anthropic) and a **Model** (e.g. `claude-sonnet-4-5`).
+2. Pick a **Provider** (e.g. Anthropic) and a **Model** (e.g. `claude-sonnet-4-6`).
 3. Attach the matching credential.
 4. Set the **Goal** field to the task in plain language:
    ```
@@ -56,14 +56,14 @@ The node returns:
   "atoms_done": 4,
   "atoms_total": 4,
   "provider_used": "anthropic",
-  "model_used":    "claude-sonnet-4-5",
+  "model_used":    "claude-sonnet-4-6",
   "cost": {
     "total_usd":         0.0143,
     "total_calls":       6,
     "prompt_tokens":     2480,
     "completion_tokens": 1120,
     "by_provider":       { "anthropic": { "cost_usd": 0.0143, "calls": 6, ... } },
-    "by_model":          { "claude-sonnet-4-5": { "cost_usd": 0.0143, ... } }
+    "by_model":          { "claude-sonnet-4-6": { "cost_usd": 0.0143, ... } }
   }
 }
 ```
@@ -94,11 +94,11 @@ A ready-to-import demo workflow ships in [`examples/mixed-provider-cost-saver.js
 
 | Provider     | Default model                         | Best for                                  |
 |--------------|---------------------------------------|-------------------------------------------|
-| Anthropic    | `claude-sonnet-4-5`                   | Decomposer, complex reasoning             |
+| Anthropic    | `claude-sonnet-4-6`                   | Decomposer, complex reasoning             |
 | OpenAI       | `gpt-4o`                              | General-purpose, structured output        |
 | Google       | `gemini-2.0-flash`                    | Cheap, fast atom executor                 |
 | Mistral (EU) | `mistral-large-latest`                | GDPR-sensitive workloads, EU residency    |
-| OpenRouter   | `anthropic/claude-sonnet-4-5`         | One key for 100+ models, model A/B tests  |
+| OpenRouter   | `anthropic/claude-sonnet-4-6`         | One key for 100+ models, model A/B tests  |
 
 Per-provider model dropdowns are pre-curated in the node UI.
 
@@ -146,7 +146,7 @@ After updating:
 1. Open every workflow that uses **AoT Harness**.
 2. Set **Provider** → `Anthropic` (matches the v0.2.x default behavior).
 3. Attach the new **AoT Harness — Anthropic** credential. Re-enter your `ANTHROPIC_API_KEY`.
-4. Pick a **Model** from the dropdown (default: `claude-sonnet-4-5`).
+4. Pick a **Model** from the dropdown (default: `claude-sonnet-4-6`).
 5. Save & test.
 
 The legacy `aotHarnessApi` credential type is still registered so existing credential entries don't disappear from your n8n credentials list — but the new node doesn't read it. Delete it after migration if you like.

@@ -18,11 +18,11 @@ export class AotHarnessApi implements ICredentialType {
       name: 'model',
       type: 'options',
       options: [
-        { name: 'Claude Opus 4.5 (empfohlen)', value: 'claude-opus-4-5' },
-        { name: 'Claude Sonnet 4.5',           value: 'claude-sonnet-4-5' },
-        { name: 'Claude Haiku 3.5 (schnell)',  value: 'claude-haiku-3-5' },
+        { name: 'Claude Opus 4.7 (empfohlen)', value: 'claude-opus-4-7' },
+        { name: 'Claude Sonnet 4.6',           value: 'claude-sonnet-4-6' },
+        { name: 'Claude Haiku 4.5 (schnell)',  value: 'claude-haiku-4-5-20251001' },
       ],
-      default: 'claude-sonnet-4-5',
+      default: 'claude-sonnet-4-6',
     },
   ];
 }

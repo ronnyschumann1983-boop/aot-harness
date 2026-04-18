@@ -5,6 +5,37 @@ Format inspired by [Keep a Changelog](https://keepachangelog.com/), versioning i
 
 ---
 
+## [0.4.0] — 2026-04-18 — Pluggable Vaults + Human-in-the-Loop
+
+### Added — Python core
+
+- `aot_harness/integrations/vault/` — new package with a formal `VaultAdapter` ABC (abstract surface: `search`, `read`, `ingest`; derived `cache_check` concrete on the base).
+- `ObsidianAdapter` — Obsidian via MCP kb_* tools (behaviour preserved from the legacy `ObsidianVault`, now inheriting from `VaultAdapter`). Mock mode still works for tests.
+- `SupabaseAdapter` — Postgres-backed vault against a `vault_patterns` table. Keyword-match candidate retrieval + Jaccard re-ranking; pgvector is the drop-in replacement planned for v0.4.1 (swap `_candidate_rows`, public surface unchanged).
+- `aot_harness/integrations/hitl.py` — `HITLNotifier` (fire-and-forget webhook POST) + `build_hitl_payload()` helper with a stable payload contract.
+- `CHIPOrchestrator` — new kwargs `qa_threshold` (default 0.75) and `hitl_notifier`. When QA retries exhaust and `qa_score < qa_threshold`, the orchestrator emits a single `hitl_review_needed` webhook with `goal`, `qa_score`, `threshold`, `attempts`, `anmerkungen`, `final_output`, `atoms_used`, `session_id`.
+- 25 new tests: a `_VaultContractMixin` re-runs identical assertions against every adapter (contract tests — new backends inherit coverage automatically); dedicated HITL tests cover payload shape, blocking POST, webhook failure handling, and orchestrator gating logic.
+
+### Changed
+
+- `integrations/__init__.py` now exports `VaultAdapter`, `ObsidianAdapter`, `SupabaseAdapter`, `HITLNotifier`, `build_hitl_payload`.
+- `obsidian_adapter.py` becomes a backward-compat shim: `ObsidianVault` now inherits from the new `ObsidianAdapter`. Existing imports (`from aot_harness.integrations.obsidian_adapter import ObsidianVault`) continue to work unchanged.
+
+### Backward compatibility
+
+- No breaking changes. v0.3.x call sites keep working without modification — vault backends are opt-in per orchestrator instance, HITL is opt-in via `hitl_notifier=...`.
+
+### Known limitations (will land in v0.4.1)
+
+- `SupabaseAdapter.search` uses keyword-match + Jaccard on the returned rows. Semantic search via pgvector is queued — adapter surface will not change.
+- n8n node does not yet expose vault-backend selection in the UI (workaround: use Webhook mode to call a Python orchestrator that uses the new vaults).
+
+### Strategic context
+
+v0.3.0 broadened provider coverage. v0.4.0 broadens memory coverage: Obsidian-only locked out teams without a filesystem-vault workflow. Supabase is the natural second backend for most n8n self-hosters (they often already run it). HITL closes the "silent bad output" gap — at scale, QA failures must page a human, not disappear into logs.
+
+---
+
 ## [0.3.0] — 2026-04-17 — Multi-Provider
 
 ### ⚠️ Breaking changes (n8n node)
@@ -83,6 +114,7 @@ Anthropic-only locked out a majority of n8n self-hosters (existing OpenAI/Gemini
 
 ---
 
+[0.4.0]: https://github.com/ronnyschumann1983-boop/aot-harness/releases/tag/v0.4.0
 [0.3.0]: https://github.com/ronnyschumann1983-boop/aot-harness/releases/tag/v0.3.0
 [0.2.2]: https://github.com/ronnyschumann1983-boop/aot-harness/releases/tag/v0.2.2
 [0.2.1]: https://github.com/ronnyschumann1983-boop/aot-harness/releases/tag/v0.2.1

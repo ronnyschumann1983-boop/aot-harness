@@ -77,9 +77,49 @@ User Goal
 | QAAgent | `core/agents.py` | Quality check (Score 0–1), retry failed atoms only |
 | Librarian | `core/agents.py` | Async Vault maintenance |
 | Memory | `core/memory.py` | Session context with AoT compression |
-| ObsidianVault | `integrations/obsidian_adapter.py` | kb_* MCP-Tools Wrapper |
+| VaultAdapter (ABC) | `integrations/vault/base.py` | Pluggable knowledge-base contract |
+| ObsidianAdapter | `integrations/vault/obsidian.py` | Obsidian via MCP kb_* tools |
+| SupabaseAdapter | `integrations/vault/supabase.py` | Postgres-backed vault (pgvector-ready) |
+| HITLNotifier | `integrations/hitl.py` | Webhook on QA failure (fire-and-forget) |
 | ClaudeAdapter | `integrations/claude_adapter.py` | Anthropic SDK (max_tokens 4096) |
 | n8n Webhook | `integrations/n8n_webhook.py` | POST /run Endpoint |
+
+---
+
+## What's New in v0.4.0 — Pluggable Vaults + Human-in-the-Loop
+
+- 🗄️ **VaultAdapter interface** — the orchestrator depends on an ABC, not a concrete vault. Add a new backend by subclassing and implementing 3 methods: `search()`, `read()`, `ingest()`.
+- 🧱 **Two built-in adapters**:
+  - `ObsidianAdapter` — MCP kb_* tools against an Obsidian vault (existing behaviour, preserved)
+  - `SupabaseAdapter` — Postgres-backed vault (`vault_patterns` table), pgvector-ready
+- 🚨 **HITL Gate** — when QA retries exhaust and score is still below threshold, a webhook fires with a stable payload (`goal`, `qa_score`, `attempts`, `anmerkungen`, `final_output`). Wire it into n8n → Slack/Email.
+- 🧪 **25 new tests** — contract tests re-run identically against every adapter; a new backend gets them for free.
+- 🔁 **Backward compatible** — existing `from aot_harness.integrations.obsidian_adapter import ObsidianVault` keeps working.
+
+```python
+from aot_harness.core.chip_orchestrator import CHIPOrchestrator
+from aot_harness.integrations import SupabaseAdapter, HITLNotifier, ClaudeAdapter
+
+orch = CHIPOrchestrator(
+    llm_client    = ClaudeAdapter(api_key="..."),
+    vault         = SupabaseAdapter(url="https://xxx.supabase.co", key="..."),
+    qa_threshold  = 0.75,
+    hitl_notifier = HITLNotifier(webhook_url="https://n8n.example.com/webhook/hitl"),
+)
+result = orch.run("Create IDD documentation for Client X")
+```
+
+Supabase schema (run once):
+
+```sql
+create table if not exists vault_patterns (
+    path       text primary key,
+    content    text not null,
+    tags       jsonb default '[]'::jsonb,
+    created_at timestamptz default now(),
+    updated_at timestamptz default now()
+);
+```
 
 ---
 
