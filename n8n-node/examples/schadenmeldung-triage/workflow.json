@@ -1,0 +1,229 @@
+{
+  "name": "AoT Harness — Schadenmeldungs-Triage (Makler-Demo)",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Schadenmeldung erfassen",
+        "formDescription": "Kundenmail + Police-Daten eintragen — der Workflow erstellt 2 Gmail-Drafts (an Kunden + Versicherer) zur Freigabe.",
+        "formFields": {
+          "values": [
+            { "fieldLabel": "Kundenname", "requiredField": true },
+            { "fieldLabel": "Kunden-E-Mail", "fieldType": "email", "requiredField": true },
+            { "fieldLabel": "Policennummer", "requiredField": true, "placeholder": "z.B. HR-48291-B" },
+            { "fieldLabel": "Police-Daten", "fieldType": "textarea", "requiredField": true, "placeholder": "Sparte, Deckungssumme, SB, Ausschluesse, ..." },
+            { "fieldLabel": "Schaden-Mail", "fieldType": "textarea", "requiredField": true, "placeholder": "Kompletter Text der eingehenden Kundenmail" },
+            {
+              "fieldLabel": "Dringlichkeit",
+              "fieldType": "dropdown",
+              "fieldOptions": { "values": [{ "option": "standard" }, { "option": "sofort" }] },
+              "requiredField": true
+            }
+          ]
+        },
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "trigger-form",
+      "name": "Form Trigger",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "schaden-triage-demo"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "goal-1",
+              "name": "goal",
+              "value": "=AUSGABE MUSS EIN EINZELNES VALIDES JSON-OBJEKT SEIN — KEIN MARKDOWN, KEIN FLIESSTEXT DAVOR ODER DANACH.\n\nAufgabe: Bearbeite folgenden Versicherungsschaden fuer Kunden {{ $json['Kundenname'] }}.\n\nDringlichkeit: {{ $json['Dringlichkeit'] }}\nPolicennummer: {{ $json['Policennummer'] }}\n\nPOLICE-DATEN:\n{{ $json['Police-Daten'] }}\n\nKUNDEN-MAIL:\n---\n{{ $json['Schaden-Mail'] }}\n---\n\nGENERIERE STRUKTURIERT auf Deutsch:\n1. Klassifikation: Sparte, Schadenart, Dringlichkeit (kurz)\n2. Sofort-Massnahmen fuer den Kunden (konkrete Handlungsliste, max. 5 Punkte)\n3. Mail-Entwurf an Kunden: empathisch, konkret, Bezug auf Police (Policennummer + Deckungsrelevantes aus den Police-Daten)\n4. Mail-Entwurf an Versicherer: foermlich, Policennummer, Schadenart, Schadendatum (heute), Hergang laut Kunde, Bitte um Schadennummer und Regulierungszusage\n\nGIB GENAU DIESES JSON ZURUECK:\n{\n  \"klassifikation\": {\"sparte\": \"...\", \"schadenart\": \"...\", \"dringlichkeit\": \"...\"},\n  \"sofort_massnahmen\": [\"Schritt 1\", \"Schritt 2\"],\n  \"mail_an_kunden\": \"Sehr geehrter Herr/Frau ..., ...\",\n  \"mail_an_versicherer\": \"Sehr geehrte Damen und Herren, ...\"\n}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "build-goal",
+      "name": "Build Goal",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "provider": "google",
+        "model": "gemini-2.0-flash",
+        "goal": "={{ $json.goal }}",
+        "mode": "chip",
+        "enableMixedMode": true,
+        "decomposerProvider": "anthropic",
+        "decomposerModel": "claude-sonnet-4-6",
+        "advanced": {
+          "qaThreshold": 0.75,
+          "maxAtoms": 5,
+          "maxTokens": 2000,
+          "qaRetry": true,
+          "language": "de"
+        }
+      },
+      "id": "aot-harness",
+      "name": "AoT Harness",
+      "type": "n8n-nodes-aot-harness.aotHarness",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "credentials": {
+        "googleGeminiAotApi": { "id": "1", "name": "AoT Harness — Google Gemini" },
+        "anthropicAotApi": { "id": "2", "name": "AoT Harness — Anthropic" }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "qa-gte-075",
+              "leftValue": "={{ $json.qa_score }}",
+              "rightValue": 0.75,
+              "operator": { "type": "number", "operation": "gte" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "qa-check",
+      "name": "QA Check (>= 0.75?)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Robustes JSON-Parsing: extrahiert erstes {...}-Objekt aus dem QA-Output.\n// Fallback bei Parse-Error -> Original-Output im Kunden-Draft.\nconst raw = ($input.item.json.output || $input.item.json.result || '').toString();\nconst match = raw.match(/\\{[\\s\\S]*\\}/);\nlet parsed;\ntry {\n  parsed = JSON.parse(match ? match[0] : raw);\n} catch (e) {\n  parsed = {\n    klassifikation:     { sparte: 'unbekannt', schadenart: 'parse-error', dringlichkeit: 'sofort' },\n    sofort_massnahmen:  ['QA-Output konnte nicht geparst werden — bitte manuell pruefen'],\n    mail_an_kunden:     raw,\n    mail_an_versicherer: raw,\n    _parse_error:       e.message,\n  };\n}\nreturn { json: { ...$input.item.json, parsed } };"
+      },
+      "id": "parse-output",
+      "name": "Parse Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "resource": "draft",
+        "operation": "create",
+        "subject": "=Re: Ihre Schadenmeldung — Police {{ $('Form Trigger').item.json['Policennummer'] }}",
+        "emailType": "text",
+        "message": "={{ $json.parsed.mail_an_kunden }}",
+        "options": {
+          "sendTo": "={{ $('Form Trigger').item.json['Kunden-E-Mail'] }}"
+        }
+      },
+      "id": "draft-customer",
+      "name": "Draft to Customer",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1340, 200],
+      "credentials": {
+        "gmailOAuth2": { "id": "3", "name": "Gmail account" }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "draft",
+        "operation": "create",
+        "subject": "=Schadenmeldung Police {{ $('Form Trigger').item.json['Policennummer'] }} — {{ $json.parsed.klassifikation.sparte }}",
+        "emailType": "text",
+        "message": "={{ $json.parsed.mail_an_versicherer }}",
+        "options": {
+          "sendTo": "schaden@versicherer.example"
+        }
+      },
+      "id": "draft-insurer",
+      "name": "Draft to Insurer",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1560, 200],
+      "credentials": {
+        "gmailOAuth2": { "id": "3", "name": "Gmail account" }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "makler@dein-buero.de",
+        "subject": "=✓ Schadenmeldung triagiert: {{ $('Form Trigger').item.json['Kundenname'] }} (Police {{ $('Form Trigger').item.json['Policennummer'] }})",
+        "emailType": "text",
+        "message": "=Hallo,\n\nein neuer Schaden wurde triagiert und ist zur Freigabe bereit.\n\nKUNDE: {{ $('Form Trigger').item.json['Kundenname'] }}\nPOLICE: {{ $('Form Trigger').item.json['Policennummer'] }}\nSPARTE: {{ $json.parsed.klassifikation.sparte }}\nSCHADENART: {{ $json.parsed.klassifikation.schadenart }}\nDRINGLICHKEIT: {{ $json.parsed.klassifikation.dringlichkeit }}\n\nQA-Score: {{ $json.qa_score }}\nAtoms: {{ $json.atoms_done }}/{{ $json.atoms_total }}\nKosten (LLM): ${{ $json.cost.total_usd }}\n\nDRAFTS (in deinen Gmail-Entwuerfen):\n- An Kunden: {{ $('Form Trigger').item.json['Kunden-E-Mail'] }}\n- An Versicherer: schaden@versicherer.example (Platzhalter — bitte anpassen)\n\nSOFORT-MASSNAHMEN (fuer den Kunden):\n{{ $json.parsed.sofort_massnahmen.join('\\n- ') }}\n\nBitte beide Drafts in Gmail pruefen und absenden.\n\n— AoT Harness",
+        "options": {}
+      },
+      "id": "notify-ok",
+      "name": "Notify Makler (OK)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1780, 200],
+      "credentials": {
+        "gmailOAuth2": { "id": "3", "name": "Gmail account" }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "makler@dein-buero.de",
+        "subject": "=⚠️ HITL-Review noetig: Schaden {{ $('Form Trigger').item.json['Kundenname'] }} (QA {{ $json.qa_score }})",
+        "emailType": "text",
+        "message": "=ACHTUNG — der Workflow konnte keinen ausreichenden QA-Score erreichen.\nDrafts wurden NICHT erstellt. Bitte manuell pruefen und bearbeiten.\n\nKUNDE:    {{ $('Form Trigger').item.json['Kundenname'] }}\nE-MAIL:   {{ $('Form Trigger').item.json['Kunden-E-Mail'] }}\nPOLICE:   {{ $('Form Trigger').item.json['Policennummer'] }}\nDRINGL.:  {{ $('Form Trigger').item.json['Dringlichkeit'] }}\n\nQA-Score: {{ $json.qa_score }} (Schwelle 0.75)\nAnmerkungen QA-Agent:\n{{ $json.notes ? $json.notes.join('\\n- ') : '(keine)' }}\n\nURSPRUENGLICHE MAIL:\n---\n{{ $('Form Trigger').item.json['Schaden-Mail'] }}\n---\n\nLLM-OUTPUT (rohe QA-Antwort):\n---\n{{ $json.output }}\n---\n\n— AoT Harness (HITL-Gate)",
+        "options": {}
+      },
+      "id": "notify-hitl",
+      "name": "HITL Notify Makler",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1120, 440],
+      "credentials": {
+        "gmailOAuth2": { "id": "3", "name": "Gmail account" }
+      }
+    }
+  ],
+  "connections": {
+    "Form Trigger": {
+      "main": [[{ "node": "Build Goal", "type": "main", "index": 0 }]]
+    },
+    "Build Goal": {
+      "main": [[{ "node": "AoT Harness", "type": "main", "index": 0 }]]
+    },
+    "AoT Harness": {
+      "main": [[{ "node": "QA Check (>= 0.75?)", "type": "main", "index": 0 }]]
+    },
+    "QA Check (>= 0.75?)": {
+      "main": [
+        [{ "node": "Parse Output", "type": "main", "index": 0 }],
+        [{ "node": "HITL Notify Makler", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Output": {
+      "main": [[{ "node": "Draft to Customer", "type": "main", "index": 0 }]]
+    },
+    "Draft to Customer": {
+      "main": [[{ "node": "Draft to Insurer", "type": "main", "index": 0 }]]
+    },
+    "Draft to Insurer": {
+      "main": [[{ "node": "Notify Makler (OK)", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "tags": [
+    { "name": "demo" },
+    { "name": "aot-harness" },
+    { "name": "versicherung" },
+    { "name": "makler" },
+    { "name": "schadenmeldung" }
+  ],
+  "meta": {
+    "description": "Produktiver Use-Case für Versicherungsmakler/Kaufleute: eingehende Schadenmail + Police-Daten → AoT-decomposed in 4 Atoms (Klassifikation, Sofort-Maßnahmen, Kunden-Draft, Versicherer-Draft) → QA-Gate → 2 Gmail-Drafts + Notify oder HITL-Review-Mail. Mixed-Provider (Claude Sonnet decomposed, Gemini Flash executes) ~$0.005/Lauf."
+  }
+}

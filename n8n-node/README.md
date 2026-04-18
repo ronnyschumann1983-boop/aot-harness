@@ -90,6 +90,19 @@ A ready-to-import demo workflow ships in [`examples/mixed-provider-cost-saver.js
 
 ---
 
+## 🛡️ Production demo: Insurance-broker claim triage
+
+A full Versicherungsmakler-use-case lives in [`examples/schadenmeldung-triage/`](examples/schadenmeldung-triage/):
+
+- **Goal:** incoming claim email → 2 ready-to-send Gmail drafts (to customer + to insurer) in ~60s
+- **Features shown:** AoT decomposition (4 atoms), Mixed-Provider cost saving, QA gate with HITL fallback (Makler gets review email if `qa_score < 0.75`)
+- **Economics:** ~20.000€/year savings for a broker handling 50 claims/month — full math in the folder's `README.md`
+- **Includes:** importable workflow, test mail, Supabase seed SQL for automatic policy lookup
+
+This is the workflow to show an interested broker.
+
+---
+
 ## Providers & default models
 
 | Provider     | Default model                         | Best for                                  |
