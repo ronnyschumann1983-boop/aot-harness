@@ -82,23 +82,33 @@ export class AotHarness implements INodeType {
     inputs:      ['main'],
     outputs:     ['main'],
     credentials: [
-      { name: 'anthropicAotApi',   required: true, displayOptions: { show: { provider: ['anthropic'] } } },
-      { name: 'openAiAotApi',      required: true, displayOptions: { show: { provider: ['openai'] } } },
-      { name: 'googleGeminiAotApi',required: true, displayOptions: { show: { provider: ['google'] } } },
-      { name: 'mistralAotApi',     required: true, displayOptions: { show: { provider: ['mistral'] } } },
-      { name: 'openRouterAotApi',  required: true, displayOptions: { show: { provider: ['openrouter'] } } },
-
-      // Mixed-mode: separate decomposer credentials (providerMix top-level)
-      { name: 'anthropicAotApi',   required: true,
-        displayOptions: { show: { providerMix: ['anthropic'] } } },
-      { name: 'openAiAotApi',      required: true,
-        displayOptions: { show: { providerMix: ['openai'] } } },
-      { name: 'googleGeminiAotApi',required: true,
-        displayOptions: { show: { providerMix: ['google'] } } },
-      { name: 'mistralAotApi',     required: true,
-        displayOptions: { show: { providerMix: ['mistral'] } } },
-      { name: 'openRouterAotApi',  required: true,
-        displayOptions: { show: { providerMix: ['openrouter'] } } },
+      // Single entry per credential with OR-semantic: shown if EITHER
+      // `provider` matches OR `providerMix` matches (via hide = NOT-A AND NOT-B).
+      { name: 'anthropicAotApi', required: true,
+        displayOptions: { hide: {
+          provider:    ['openai', 'google', 'mistral', 'openrouter'],
+          providerMix: ['off', 'openai', 'google', 'mistral', 'openrouter'],
+        } } },
+      { name: 'openAiAotApi', required: true,
+        displayOptions: { hide: {
+          provider:    ['anthropic', 'google', 'mistral', 'openrouter'],
+          providerMix: ['off', 'anthropic', 'google', 'mistral', 'openrouter'],
+        } } },
+      { name: 'googleGeminiAotApi', required: true,
+        displayOptions: { hide: {
+          provider:    ['anthropic', 'openai', 'mistral', 'openrouter'],
+          providerMix: ['off', 'anthropic', 'openai', 'mistral', 'openrouter'],
+        } } },
+      { name: 'mistralAotApi', required: true,
+        displayOptions: { hide: {
+          provider:    ['anthropic', 'openai', 'google', 'openrouter'],
+          providerMix: ['off', 'anthropic', 'openai', 'google', 'openrouter'],
+        } } },
+      { name: 'openRouterAotApi', required: true,
+        displayOptions: { hide: {
+          provider:    ['anthropic', 'openai', 'google', 'mistral'],
+          providerMix: ['off', 'anthropic', 'openai', 'google', 'mistral'],
+        } } },
     ],
 
     properties: [
