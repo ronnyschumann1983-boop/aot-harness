@@ -28,11 +28,14 @@ export const PRICING_PER_1M: Record<string, [number, number]> = {
   'claude-opus-4-7':             [15.00, 75.00],
   'claude-sonnet-4-6':           [ 3.00, 15.00],
   'claude-haiku-4-5-20251001':   [ 0.80,  4.00],
-  // OpenAI
+  // OpenAI (GPT-5.4 family, released March 2026)
+  'gpt-5.4':               [ 2.50, 15.00],
+  'gpt-5.4-mini':          [ 0.75,  3.00],
+  'gpt-5.4-nano':          [ 0.20,  0.80],
+  'gpt-5.4-pro':           [30.00,180.00],
+  // OpenAI legacy
   'gpt-4o':                [ 2.50, 10.00],
   'gpt-4o-mini':           [ 0.15,  0.60],
-  'o1':                    [15.00, 60.00],
-  'o1-mini':               [ 3.00, 12.00],
   // Google Gemini (April 2026 — 2.0/1.5 deprecated by Google)
   'gemini-3.1-pro-preview':    [ 1.50,  8.00],
   'gemini-3-flash-preview':    [ 0.15,  0.60],
@@ -46,6 +49,8 @@ export const PRICING_PER_1M: Record<string, [number, number]> = {
   // OpenRouter (strip provider prefix and lookup base model)
   'anthropic/claude-opus-4-7':   [15.00, 75.00],
   'anthropic/claude-sonnet-4-6': [ 3.00, 15.00],
+  'openai/gpt-5.4':              [ 2.50, 15.00],
+  'openai/gpt-5.4-mini':         [ 0.75,  3.00],
   'openai/gpt-4o':               [ 2.50, 10.00],
   'google/gemini-2.5-flash':       [ 0.30,  2.50],
   'google/gemini-2.5-pro':         [ 1.25, 10.00],
@@ -65,7 +70,7 @@ export type ProviderId = 'anthropic' | 'openai' | 'google' | 'mistral' | 'openro
 
 export const DEFAULT_MODEL: Record<ProviderId, string> = {
   anthropic:  'claude-sonnet-4-6',
-  openai:     'gpt-4o',
+  openai:     'gpt-5.4',
   google:     'gemini-2.5-flash',
   mistral:    'mistral-large-latest',
   openrouter: 'anthropic/claude-sonnet-4-6',
@@ -87,10 +92,12 @@ export const MODEL_OPTIONS: Record<ProviderId, Array<{ name: string; value: stri
     { name: 'Claude Haiku 4.5 (fast + cheap)',      value: 'claude-haiku-4-5-20251001' },
   ],
   openai: [
-    { name: 'GPT-4o',          value: 'gpt-4o' },
-    { name: 'GPT-4o Mini',     value: 'gpt-4o-mini' },
-    { name: 'o1 (reasoning)',  value: 'o1' },
-    { name: 'o1-mini',         value: 'o1-mini' },
+    { name: 'GPT-5.4 (recommended)',         value: 'gpt-5.4' },
+    { name: 'GPT-5.4 Mini (fast + cheap)',   value: 'gpt-5.4-mini' },
+    { name: 'GPT-5.4 Nano (cheapest)',       value: 'gpt-5.4-nano' },
+    { name: 'GPT-5.4 Pro (highest quality)', value: 'gpt-5.4-pro' },
+    { name: 'GPT-4o (legacy)',               value: 'gpt-4o' },
+    { name: 'GPT-4o Mini (legacy)',          value: 'gpt-4o-mini' },
   ],
   google: [
     { name: 'Gemini 3.1 Pro (preview, highest quality)', value: 'gemini-3.1-pro-preview' },
@@ -105,14 +112,16 @@ export const MODEL_OPTIONS: Record<ProviderId, Array<{ name: string; value: stri
     { name: 'Codestral (EU)',      value: 'codestral-latest' },
   ],
   openrouter: [
-    { name: 'Claude Sonnet 4.6',    value: 'anthropic/claude-sonnet-4-6' },
-    { name: 'GPT-4o',               value: 'openai/gpt-4o' },
-    { name: 'Gemini 2.5 Flash',     value: 'google/gemini-2.5-flash' },
-    { name: 'Gemini 2.5 Pro',       value: 'google/gemini-2.5-pro' },
+    { name: 'Claude Sonnet 4.6',        value: 'anthropic/claude-sonnet-4-6' },
+    { name: 'GPT-5.4',                  value: 'openai/gpt-5.4' },
+    { name: 'GPT-5.4 Mini',             value: 'openai/gpt-5.4-mini' },
+    { name: 'GPT-4o (legacy)',          value: 'openai/gpt-4o' },
+    { name: 'Gemini 2.5 Flash',         value: 'google/gemini-2.5-flash' },
+    { name: 'Gemini 2.5 Pro',           value: 'google/gemini-2.5-pro' },
     { name: 'Gemini 3 Flash (preview)', value: 'google/gemini-3-flash-preview' },
-    { name: 'DeepSeek V3',          value: 'deepseek/deepseek-chat' },
-    { name: 'Llama 3.3 70B',        value: 'meta-llama/llama-3.3-70b-instruct' },
-    { name: 'Qwen 2.5 72B',         value: 'qwen/qwen-2.5-72b-instruct' },
+    { name: 'DeepSeek V3',              value: 'deepseek/deepseek-chat' },
+    { name: 'Llama 3.3 70B',            value: 'meta-llama/llama-3.3-70b-instruct' },
+    { name: 'Qwen 2.5 72B',             value: 'qwen/qwen-2.5-72b-instruct' },
   ],
 };
 
