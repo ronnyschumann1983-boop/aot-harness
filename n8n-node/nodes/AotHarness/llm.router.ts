@@ -33,10 +33,12 @@ export const PRICING_PER_1M: Record<string, [number, number]> = {
   'gpt-4o-mini':           [ 0.15,  0.60],
   'o1':                    [15.00, 60.00],
   'o1-mini':               [ 3.00, 12.00],
-  // Google Gemini
-  'gemini-2.0-flash':      [ 0.10,  0.40],
-  'gemini-1.5-pro':        [ 1.25,  5.00],
-  'gemini-1.5-flash':      [ 0.075, 0.30],
+  // Google Gemini (April 2026 — 2.0/1.5 deprecated by Google)
+  'gemini-3.1-pro-preview':    [ 1.50,  8.00],
+  'gemini-3-flash-preview':    [ 0.15,  0.60],
+  'gemini-2.5-pro':            [ 1.25, 10.00],
+  'gemini-2.5-flash':          [ 0.30,  2.50],
+  'gemini-2.5-flash-lite':     [ 0.10,  0.40],
   // Mistral
   'mistral-large-latest':  [ 2.00,  6.00],
   'mistral-small-latest':  [ 0.20,  0.60],
@@ -45,7 +47,9 @@ export const PRICING_PER_1M: Record<string, [number, number]> = {
   'anthropic/claude-opus-4-7':   [15.00, 75.00],
   'anthropic/claude-sonnet-4-6': [ 3.00, 15.00],
   'openai/gpt-4o':               [ 2.50, 10.00],
-  'google/gemini-2.0-flash':     [ 0.10,  0.40],
+  'google/gemini-2.5-flash':       [ 0.30,  2.50],
+  'google/gemini-2.5-pro':         [ 1.25, 10.00],
+  'google/gemini-3-flash-preview': [ 0.15,  0.60],
   'deepseek/deepseek-chat':      [ 0.14,  0.28],
   'meta-llama/llama-3.3-70b-instruct': [ 0.30,  0.50],
   'qwen/qwen-2.5-72b-instruct':  [ 0.40,  0.80],
@@ -62,7 +66,7 @@ export type ProviderId = 'anthropic' | 'openai' | 'google' | 'mistral' | 'openro
 export const DEFAULT_MODEL: Record<ProviderId, string> = {
   anthropic:  'claude-sonnet-4-6',
   openai:     'gpt-4o',
-  google:     'gemini-2.0-flash',
+  google:     'gemini-2.5-flash',
   mistral:    'mistral-large-latest',
   openrouter: 'anthropic/claude-sonnet-4-6',
 };
@@ -89,9 +93,11 @@ export const MODEL_OPTIONS: Record<ProviderId, Array<{ name: string; value: stri
     { name: 'o1-mini',         value: 'o1-mini' },
   ],
   google: [
-    { name: 'Gemini 2.0 Flash (recommended)',  value: 'gemini-2.0-flash' },
-    { name: 'Gemini 1.5 Pro (high quality)',   value: 'gemini-1.5-pro' },
-    { name: 'Gemini 1.5 Flash',                value: 'gemini-1.5-flash' },
+    { name: 'Gemini 3.1 Pro (preview, highest quality)', value: 'gemini-3.1-pro-preview' },
+    { name: 'Gemini 3 Flash (preview, fast)',            value: 'gemini-3-flash-preview' },
+    { name: 'Gemini 2.5 Pro (stable, high quality)',     value: 'gemini-2.5-pro' },
+    { name: 'Gemini 2.5 Flash (recommended, stable)',    value: 'gemini-2.5-flash' },
+    { name: 'Gemini 2.5 Flash Lite (cheapest)',          value: 'gemini-2.5-flash-lite' },
   ],
   mistral: [
     { name: 'Mistral Large (EU)',  value: 'mistral-large-latest' },
@@ -101,7 +107,9 @@ export const MODEL_OPTIONS: Record<ProviderId, Array<{ name: string; value: stri
   openrouter: [
     { name: 'Claude Sonnet 4.6',    value: 'anthropic/claude-sonnet-4-6' },
     { name: 'GPT-4o',               value: 'openai/gpt-4o' },
-    { name: 'Gemini 2.0 Flash',     value: 'google/gemini-2.0-flash' },
+    { name: 'Gemini 2.5 Flash',     value: 'google/gemini-2.5-flash' },
+    { name: 'Gemini 2.5 Pro',       value: 'google/gemini-2.5-pro' },
+    { name: 'Gemini 3 Flash (preview)', value: 'google/gemini-3-flash-preview' },
     { name: 'DeepSeek V3',          value: 'deepseek/deepseek-chat' },
     { name: 'Llama 3.3 70B',        value: 'meta-llama/llama-3.3-70b-instruct' },
     { name: 'Qwen 2.5 72B',         value: 'qwen/qwen-2.5-72b-instruct' },

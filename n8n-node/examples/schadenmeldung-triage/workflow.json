@@ -53,7 +53,7 @@
     {
       "parameters": {
         "provider": "google",
-        "model": "gemini-2.0-flash",
+        "model": "gemini-2.5-flash",
         "goal": "={{ $json.goal }}",
         "mode": "chip",
         "enableMixedMode": true,
@@ -101,7 +101,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Robustes JSON-Parsing: extrahiert erstes {...}-Objekt aus dem QA-Output.\n// Fallback bei Parse-Error -> Original-Output im Kunden-Draft.\nconst raw = ($input.item.json.output || $input.item.json.result || '').toString();\nconst match = raw.match(/\\{[\\s\\S]*\\}/);\nlet parsed;\ntry {\n  parsed = JSON.parse(match ? match[0] : raw);\n} catch (e) {\n  parsed = {\n    klassifikation:     { sparte: 'unbekannt', schadenart: 'parse-error', dringlichkeit: 'sofort' },\n    sofort_massnahmen:  ['QA-Output konnte nicht geparst werden — bitte manuell pruefen'],\n    mail_an_kunden:     raw,\n    mail_an_versicherer: raw,\n    _parse_error:       e.message,\n  };\n}\nreturn { json: { ...$input.item.json, parsed } };"
+        "jsCode": "// Robustes Parsing + Schema-Defaults + Sanity-Checks + QA-Band.\nconst MAX_LEN = 2500;\nconst MIN_MAIL_LEN = 120;\nconst clamp = (s) => (typeof s === 'string' ? s.substring(0, MAX_LEN) : '');\n\nconst raw = ($input.item.json.output || $input.item.json.result || '').toString();\nconst match = raw.match(/\\{[\\s\\S]*\\}/);\nlet parsed;\ntry {\n  parsed = JSON.parse(match ? match[0] : raw);\n} catch (e) {\n  parsed = { _parse_error: e.message };\n}\nif (typeof parsed !== 'object' || parsed === null) parsed = {};\n\n// Schema-Defaults — garantiert alle erwarteten Keys, egal was der LLM liefert:\nparsed.klassifikation = parsed.klassifikation || { sparte: 'unbekannt', schadenart: 'unbekannt', dringlichkeit: 'standard' };\nparsed.sofort_massnahmen = Array.isArray(parsed.sofort_massnahmen) ? parsed.sofort_massnahmen : [];\nif (!parsed.sofort_massnahmen.length) parsed.sofort_massnahmen = ['Bitte manuell pruefen — kein strukturierter Output vom LLM.'];\nparsed.mail_an_kunden = clamp((typeof parsed.mail_an_kunden === 'string' && parsed.mail_an_kunden.trim()) ? parsed.mail_an_kunden : raw);\nparsed.mail_an_versicherer = clamp((typeof parsed.mail_an_versicherer === 'string' && parsed.mail_an_versicherer.trim()) ? parsed.mail_an_versicherer : raw);\nparsed.sofort_massnahmen_text = parsed.sofort_massnahmen.map(s => '- ' + s).join('\\n');\n\n// Sanity-Checks → Warnungen fuer Makler-Review\nconst warnings = [];\nif (!parsed.klassifikation.sparte || /unbekannt|unknown|n\\/a/i.test(parsed.klassifikation.sparte)) warnings.push('Sparte nicht klassifiziert');\nif (!parsed.klassifikation.schadenart || /unbekannt|unknown|n\\/a/i.test(parsed.klassifikation.schadenart)) warnings.push('Schadenart nicht klassifiziert');\nif (parsed.sofort_massnahmen.every(s => typeof s === 'string' && s.trim().length < 15)) warnings.push('Sofort-Massnahmen zu kurz/unspezifisch');\nif (parsed.mail_an_kunden.length < MIN_MAIL_LEN) warnings.push('Kundenmail ungewoehnlich kurz (<' + MIN_MAIL_LEN + ' Zeichen)');\nif (parsed.mail_an_versicherer.length < MIN_MAIL_LEN) warnings.push('Versicherer-Mail ungewoehnlich kurz (<' + MIN_MAIL_LEN + ' Zeichen)');\nif (parsed.mail_an_kunden.length === MAX_LEN) warnings.push('Kundenmail auf ' + MAX_LEN + ' Zeichen gekuerzt');\nparsed.warnings = warnings;\n\n// QA-Band (Interpretation des qa_score fuer Makler):\nconst score = Number($input.item.json.qa_score) || 0;\nlet qa_band, qa_band_label;\nif (score >= 0.9)      { qa_band = 'hoch';   qa_band_label = 'hoch verlaesslich — Drafts direkt freigeben'; }\nelse if (score >= 0.75) { qa_band = 'mittel'; qa_band_label = 'entwurfsreif — vor Versand durchlesen'; }\nelse                     { qa_band = 'niedrig'; qa_band_label = 'manuelle Pruefung zwingend'; }\nparsed.qa_band = qa_band;\nparsed.qa_band_label = qa_band_label;\n\nreturn { json: { ...$input.item.json, parsed } };"
       },
       "id": "parse-output",
       "name": "Parse Output",
@@ -133,7 +133,7 @@
       "parameters": {
         "resource": "draft",
         "operation": "create",
-        "subject": "=Schadenmeldung Police {{ $('Form Trigger').item.json['Policennummer'] }} — {{ $json.parsed.klassifikation.sparte }}",
+        "subject": "=Schadenmeldung Police {{ $('Form Trigger').item.json['Policennummer'] }}",
         "emailType": "text",
         "message": "={{ $json.parsed.mail_an_versicherer }}",
         "options": {
@@ -154,9 +154,9 @@
         "resource": "message",
         "operation": "send",
         "sendTo": "makler@dein-buero.de",
-        "subject": "=✓ Schadenmeldung triagiert: {{ $('Form Trigger').item.json['Kundenname'] }} (Police {{ $('Form Trigger').item.json['Policennummer'] }})",
+        "subject": "=✓ Schadenmeldung triagiert — Police {{ $('Form Trigger').item.json['Policennummer'] }}",
         "emailType": "text",
-        "message": "=Hallo,\n\nein neuer Schaden wurde triagiert und ist zur Freigabe bereit.\n\nKUNDE: {{ $('Form Trigger').item.json['Kundenname'] }}\nPOLICE: {{ $('Form Trigger').item.json['Policennummer'] }}\nSPARTE: {{ $json.parsed.klassifikation.sparte }}\nSCHADENART: {{ $json.parsed.klassifikation.schadenart }}\nDRINGLICHKEIT: {{ $json.parsed.klassifikation.dringlichkeit }}\n\nQA-Score: {{ $json.qa_score }}\nAtoms: {{ $json.atoms_done }}/{{ $json.atoms_total }}\nKosten (LLM): ${{ $json.cost.total_usd }}\n\nDRAFTS (in deinen Gmail-Entwuerfen):\n- An Kunden: {{ $('Form Trigger').item.json['Kunden-E-Mail'] }}\n- An Versicherer: schaden@versicherer.example (Platzhalter — bitte anpassen)\n\nSOFORT-MASSNAHMEN (fuer den Kunden):\n{{ $json.parsed.sofort_massnahmen.join('\\n- ') }}\n\nBitte beide Drafts in Gmail pruefen und absenden.\n\n— AoT Harness",
+        "message": "=Schadenmeldung triagiert — Entscheidungsuebersicht\n\nFALL\n  Kunde:       {{ $('Form Trigger').item.json['Kundenname'] }}\n  Police:      {{ $('Form Trigger').item.json['Policennummer'] }}\n  Sparte:      {{ $('Parse Output').item.json.parsed.klassifikation.sparte }}\n  Schadenart:  {{ $('Parse Output').item.json.parsed.klassifikation.schadenart }}\n  Dringlichk.: {{ $('Parse Output').item.json.parsed.klassifikation.dringlichkeit }}\n\nSTATUS\n  Drafts erstellt:  JA (Kunde + Versicherer)\n  QA-Score:         {{ $('AoT Harness').item.json.qa_score }} → {{ $('Parse Output').item.json.parsed.qa_band_label }}\n  Bearbeitungskosten: USD {{ $('AoT Harness').item.json.cost.total_usd }}\n  Dekomposition:    {{ $('AoT Harness').item.json.atoms_done }} von {{ $('AoT Harness').item.json.atoms_total }} Atomen\n\nRISIKO-HINWEISE\n  {{ $('Parse Output').item.json.parsed.warnings.length ? '- ' + $('Parse Output').item.json.parsed.warnings.join('\\n  - ') : 'keine Auffaelligkeiten' }}\n\nEMPFOHLENE NAECHSTE SCHRITTE\n  1. Gmail-Entwuerfe pruefen (Kunde: {{ $('Form Trigger').item.json['Kunden-E-Mail'] }} + Versicherer: schaden@versicherer.example)\n  2. Versicherer-Adresse auf korrekten Empfaenger anpassen\n  3. Bei QA-Band 'niedrig' oder Warnungen: NICHT ungeprueft senden\n  4. Schadennummer vom Versicherer nach Versand im System anlegen\n\nSOFORT-MASSNAHMEN FUER DEN KUNDEN (im Kunden-Draft enthalten)\n{{ $('Parse Output').item.json.parsed.sofort_massnahmen_text }}\n\n— AoT Harness",
         "options": {}
       },
       "id": "notify-ok",
@@ -173,7 +173,7 @@
         "resource": "message",
         "operation": "send",
         "sendTo": "makler@dein-buero.de",
-        "subject": "=⚠️ HITL-Review noetig: Schaden {{ $('Form Trigger').item.json['Kundenname'] }} (QA {{ $json.qa_score }})",
+        "subject": "=⚠️ HITL-Review noetig — Police {{ $('Form Trigger').item.json['Policennummer'] }}",
         "emailType": "text",
         "message": "=ACHTUNG — der Workflow konnte keinen ausreichenden QA-Score erreichen.\nDrafts wurden NICHT erstellt. Bitte manuell pruefen und bearbeiten.\n\nKUNDE:    {{ $('Form Trigger').item.json['Kundenname'] }}\nE-MAIL:   {{ $('Form Trigger').item.json['Kunden-E-Mail'] }}\nPOLICE:   {{ $('Form Trigger').item.json['Policennummer'] }}\nDRINGL.:  {{ $('Form Trigger').item.json['Dringlichkeit'] }}\n\nQA-Score: {{ $json.qa_score }} (Schwelle 0.75)\nAnmerkungen QA-Agent:\n{{ $json.notes ? $json.notes.join('\\n- ') : '(keine)' }}\n\nURSPRUENGLICHE MAIL:\n---\n{{ $('Form Trigger').item.json['Schaden-Mail'] }}\n---\n\nLLM-OUTPUT (rohe QA-Antwort):\n---\n{{ $json.output }}\n---\n\n— AoT Harness (HITL-Gate)",
         "options": {}

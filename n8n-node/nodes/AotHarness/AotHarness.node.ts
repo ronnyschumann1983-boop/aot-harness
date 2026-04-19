@@ -88,17 +88,17 @@ export class AotHarness implements INodeType {
       { name: 'mistralAotApi',     required: true, displayOptions: { show: { provider: ['mistral'] } } },
       { name: 'openRouterAotApi',  required: true, displayOptions: { show: { provider: ['openrouter'] } } },
 
-      // Mixed-mode: separate decomposer credentials
+      // Mixed-mode: separate decomposer credentials (from advanced collection)
       { name: 'anthropicAotApi',   required: true,
-        displayOptions: { show: { enableMixedMode: [true], decomposerProvider: ['anthropic'] } } },
+        displayOptions: { show: { '/advanced.enableMixedMode': [true], '/advanced.decomposerProvider': ['anthropic'] } } },
       { name: 'openAiAotApi',      required: true,
-        displayOptions: { show: { enableMixedMode: [true], decomposerProvider: ['openai'] } } },
+        displayOptions: { show: { '/advanced.enableMixedMode': [true], '/advanced.decomposerProvider': ['openai'] } } },
       { name: 'googleGeminiAotApi',required: true,
-        displayOptions: { show: { enableMixedMode: [true], decomposerProvider: ['google'] } } },
+        displayOptions: { show: { '/advanced.enableMixedMode': [true], '/advanced.decomposerProvider': ['google'] } } },
       { name: 'mistralAotApi',     required: true,
-        displayOptions: { show: { enableMixedMode: [true], decomposerProvider: ['mistral'] } } },
+        displayOptions: { show: { '/advanced.enableMixedMode': [true], '/advanced.decomposerProvider': ['mistral'] } } },
       { name: 'openRouterAotApi',  required: true,
-        displayOptions: { show: { enableMixedMode: [true], decomposerProvider: ['openrouter'] } } },
+        displayOptions: { show: { '/advanced.enableMixedMode': [true], '/advanced.decomposerProvider': ['openrouter'] } } },
     ],
 
     properties: [
@@ -138,7 +138,7 @@ export class AotHarness implements INodeType {
         displayName: 'Model',
         name:        'model',
         type:        'options',
-        default:     'gemini-2.0-flash',
+        default:     'gemini-2.5-flash',
         options:     modelOptionsForProvider('google'),
         displayOptions: { show: { provider: ['google'] } },
       },
@@ -189,70 +189,6 @@ export class AotHarness implements INodeType {
         displayOptions: { show: { mode: ['webhook'] } },
       },
 
-      // ── Mixed-Mode Section (killer feature) ───────────────────────────────
-      {
-        displayName: '🪙 Enable Mixed-Provider Mode (cost-saving)',
-        name:        'enableMixedMode',
-        type:        'boolean',
-        default:     false,
-        description: 'Use a separate (smarter) provider for AoT decomposition while a cheaper one executes atoms. Typical saving: 60-80%.',
-      },
-      {
-        displayName: 'Decomposer Provider',
-        name:        'decomposerProvider',
-        type:        'options',
-        default:     'anthropic',
-        description: 'High-quality LLM for the initial AoT decomposition step (only — atoms still use the main provider above)',
-        options: [
-          { name: 'Anthropic (Claude)',  value: 'anthropic' },
-          { name: 'OpenAI (GPT)',        value: 'openai' },
-          { name: 'Google (Gemini)',     value: 'google' },
-          { name: 'Mistral',             value: 'mistral' },
-          { name: 'OpenRouter',          value: 'openrouter' },
-        ],
-        displayOptions: { show: { enableMixedMode: [true] } },
-      },
-      {
-        displayName: 'Decomposer Model',
-        name:        'decomposerModel',
-        type:        'options',
-        default:     'claude-opus-4-7',
-        options:     modelOptionsForProvider('anthropic'),
-        displayOptions: { show: { enableMixedMode: [true], decomposerProvider: ['anthropic'] } },
-      },
-      {
-        displayName: 'Decomposer Model',
-        name:        'decomposerModel',
-        type:        'options',
-        default:     'gpt-4o',
-        options:     modelOptionsForProvider('openai'),
-        displayOptions: { show: { enableMixedMode: [true], decomposerProvider: ['openai'] } },
-      },
-      {
-        displayName: 'Decomposer Model',
-        name:        'decomposerModel',
-        type:        'options',
-        default:     'gemini-1.5-pro',
-        options:     modelOptionsForProvider('google'),
-        displayOptions: { show: { enableMixedMode: [true], decomposerProvider: ['google'] } },
-      },
-      {
-        displayName: 'Decomposer Model',
-        name:        'decomposerModel',
-        type:        'options',
-        default:     'mistral-large-latest',
-        options:     modelOptionsForProvider('mistral'),
-        displayOptions: { show: { enableMixedMode: [true], decomposerProvider: ['mistral'] } },
-      },
-      {
-        displayName: 'Decomposer Model',
-        name:        'decomposerModel',
-        type:        'options',
-        default:     'anthropic/claude-opus-4-7',
-        options:     modelOptionsForProvider('openrouter'),
-        displayOptions: { show: { enableMixedMode: [true], decomposerProvider: ['openrouter'] } },
-      },
-
       // ── Advanced ──────────────────────────────────────────────────────────
       {
         displayName: 'Optionen',
@@ -298,6 +234,69 @@ export class AotHarness implements INodeType {
             ],
             default: 'de',
           },
+          // ── Mixed-Mode (killer feature) ────────────────────────────────────
+          {
+            displayName: 'Provider Mix (cost-saving)',
+            name:        'enableMixedMode',
+            type:        'boolean',
+            default:     false,
+            description: 'Use a separate (smarter) provider for AoT decomposition while a cheaper one executes atoms. Typical saving: 60-80%.',
+          },
+          {
+            displayName: 'Decomposer Provider',
+            name:        'decomposerProvider',
+            type:        'options',
+            default:     'anthropic',
+            description: 'High-quality LLM for the initial AoT decomposition step (only — atoms still use the main provider above)',
+            options: [
+              { name: 'Anthropic (Claude)',  value: 'anthropic' },
+              { name: 'OpenAI (GPT)',        value: 'openai' },
+              { name: 'Google (Gemini)',     value: 'google' },
+              { name: 'Mistral',             value: 'mistral' },
+              { name: 'OpenRouter',          value: 'openrouter' },
+            ],
+            displayOptions: { show: { enableMixedMode: [true] } },
+          },
+          {
+            displayName: 'Decomposer Model (Anthropic)',
+            name:        'decomposerModelAnthropic',
+            type:        'options',
+            default:     'claude-opus-4-7',
+            options:     modelOptionsForProvider('anthropic'),
+            displayOptions: { show: { enableMixedMode: [true], decomposerProvider: ['anthropic'] } },
+          },
+          {
+            displayName: 'Decomposer Model (OpenAI)',
+            name:        'decomposerModelOpenAi',
+            type:        'options',
+            default:     'gpt-4o',
+            options:     modelOptionsForProvider('openai'),
+            displayOptions: { show: { enableMixedMode: [true], decomposerProvider: ['openai'] } },
+          },
+          {
+            displayName: 'Decomposer Model (Google)',
+            name:        'decomposerModelGoogle',
+            type:        'options',
+            default:     'gemini-2.5-pro',
+            options:     modelOptionsForProvider('google'),
+            displayOptions: { show: { enableMixedMode: [true], decomposerProvider: ['google'] } },
+          },
+          {
+            displayName: 'Decomposer Model (Mistral)',
+            name:        'decomposerModelMistral',
+            type:        'options',
+            default:     'mistral-large-latest',
+            options:     modelOptionsForProvider('mistral'),
+            displayOptions: { show: { enableMixedMode: [true], decomposerProvider: ['mistral'] } },
+          },
+          {
+            displayName: 'Decomposer Model (OpenRouter)',
+            name:        'decomposerModelOpenRouter',
+            type:        'options',
+            default:     'anthropic/claude-opus-4-7',
+            options:     modelOptionsForProvider('openrouter'),
+            displayOptions: { show: { enableMixedMode: [true], decomposerProvider: ['openrouter'] } },
+          },
         ],
       },
     ],
@@ -312,21 +311,28 @@ export class AotHarness implements INodeType {
       const mode             = this.getNodeParameter('mode', i) as string;
       const provider         = this.getNodeParameter('provider', i) as ProviderId;
       const model            = this.getNodeParameter('model', i) as string;
-      const enableMixedMode  = this.getNodeParameter('enableMixedMode', i, false) as boolean;
       const advanced         = this.getNodeParameter('advanced', i) as Record<string, unknown>;
 
-      const maxTokens   = (advanced.maxTokens   as number)  ?? 1500;
-      const qaThreshold = (advanced.qaThreshold as number)  ?? 0.75;
-      const qaRetry     = (advanced.qaRetry     as boolean) ?? true;
-      const language    = (advanced.language    as string)  ?? 'de';
+      const maxTokens       = (advanced.maxTokens       as number)  ?? 1500;
+      const qaThreshold     = (advanced.qaThreshold     as number)  ?? 0.75;
+      const qaRetry         = (advanced.qaRetry         as boolean) ?? true;
+      const language        = (advanced.language        as string)  ?? 'de';
+      const enableMixedMode = (advanced.enableMixedMode as boolean) ?? false;
 
       // ── Resolve executor + (optional) decomposer LLM configs ────────────
       const executorConfig: LLMConfig = await resolveCredentials(this, provider, model, maxTokens);
 
       let decomposerConfig: LLMConfig = executorConfig;
       if (enableMixedMode) {
-        const dProvider = this.getNodeParameter('decomposerProvider', i) as ProviderId;
-        const dModel    = (this.getNodeParameter('decomposerModel', i) as string) || DEFAULT_MODEL[dProvider];
+        const dProvider = (advanced.decomposerProvider as ProviderId) || 'anthropic';
+        const dModelKey: Record<ProviderId, string> = {
+          anthropic:  'decomposerModelAnthropic',
+          openai:     'decomposerModelOpenAi',
+          google:     'decomposerModelGoogle',
+          mistral:    'decomposerModelMistral',
+          openrouter: 'decomposerModelOpenRouter',
+        };
+        const dModel = (advanced[dModelKey[dProvider]] as string) || DEFAULT_MODEL[dProvider];
         decomposerConfig = await resolveCredentials(this, dProvider, dModel, maxTokens);
       }
 

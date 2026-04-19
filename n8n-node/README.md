@@ -109,7 +109,7 @@ This is the workflow to show an interested broker.
 |--------------|---------------------------------------|-------------------------------------------|
 | Anthropic    | `claude-sonnet-4-6`                   | Decomposer, complex reasoning             |
 | OpenAI       | `gpt-4o`                              | General-purpose, structured output        |
-| Google       | `gemini-2.0-flash`                    | Cheap, fast atom executor                 |
+| Google       | `gemini-2.5-flash`                    | Cheap, fast atom executor                 |
 | Mistral (EU) | `mistral-large-latest`                | GDPR-sensitive workloads, EU residency    |
 | OpenRouter   | `anthropic/claude-sonnet-4-6`         | One key for 100+ models, model A/B tests  |
 

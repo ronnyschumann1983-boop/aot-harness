@@ -36,7 +36,7 @@
     {
       "parameters": {
         "provider": "google",
-        "model": "gemini-2.0-flash",
+        "model": "gemini-2.5-flash",
         "goal": "Erstelle eine kurze IDD-Dokumentation (Beratungsprotokoll) fuer einen Kunden, 42 Jahre, sucht private Haftpflichtversicherung. Beratungsanlass: Auszug aus Elternhaus, jetzt eigener Hausstand.",
         "mode": "chip",
         "enableMixedMode": true,
