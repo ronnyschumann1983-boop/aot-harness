@@ -357,9 +357,18 @@ export class AotHarness implements INodeType {
           decomposeRes.text, { atoms: [] }
         );
 
-        if (!decomposeData.atoms.length) {
+        if (!Array.isArray(decomposeData?.atoms) || decomposeData.atoms.length === 0) {
           decomposeData.atoms = [{ id: 'a1', question: goal, depends_on: [] }];
         }
+
+        // Normalize each atom: ensure id/question/depends_on are sane
+        decomposeData.atoms = decomposeData.atoms.map((a, idx) => ({
+          id:         (a as { id?: string }).id         ?? `a${idx + 1}`,
+          question:   (a as { question?: string }).question   ?? goal,
+          depends_on: Array.isArray((a as { depends_on?: unknown }).depends_on)
+                      ? (a as { depends_on: string[] }).depends_on
+                      : [],
+        }));
 
         const graph: AtomGraph = { goal, atoms: {} };
         for (const a of decomposeData.atoms) {
