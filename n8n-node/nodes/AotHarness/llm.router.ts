@@ -335,7 +335,16 @@ export async function resolveCredentials(
   maxTokens: number,
 ): Promise<LLMConfig> {
   const credName = CREDENTIAL_NAME[provider];
-  const creds    = await ctx.getCredentials(credName);
+  let creds: Record<string, unknown>;
+  try {
+    creds = await ctx.getCredentials(credName) as Record<string, unknown>;
+  } catch {
+    throw new Error(
+      `No credential attached for provider "${provider}" (expected credential type: "${credName}"). ` +
+      `Open the AoT Harness node, scroll to the Credentials section, and attach an "${credName}" credential. ` +
+      `For Provider Mix mode you need to attach BOTH the primary provider credential and the decomposer provider credential.`,
+    );
+  }
   return {
     provider,
     model:          model || DEFAULT_MODEL[provider],

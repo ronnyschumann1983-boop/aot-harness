@@ -82,33 +82,14 @@ export class AotHarness implements INodeType {
     inputs:      ['main'],
     outputs:     ['main'],
     credentials: [
-      // Single entry per credential with OR-semantic: shown if EITHER
-      // `provider` matches OR `providerMix` matches (via hide = NOT-A AND NOT-B).
-      { name: 'anthropicAotApi', required: true,
-        displayOptions: { hide: {
-          provider:    ['openai', 'google', 'mistral', 'openrouter'],
-          providerMix: ['off', 'openai', 'google', 'mistral', 'openrouter'],
-        } } },
-      { name: 'openAiAotApi', required: true,
-        displayOptions: { hide: {
-          provider:    ['anthropic', 'google', 'mistral', 'openrouter'],
-          providerMix: ['off', 'anthropic', 'google', 'mistral', 'openrouter'],
-        } } },
-      { name: 'googleGeminiAotApi', required: true,
-        displayOptions: { hide: {
-          provider:    ['anthropic', 'openai', 'mistral', 'openrouter'],
-          providerMix: ['off', 'anthropic', 'openai', 'mistral', 'openrouter'],
-        } } },
-      { name: 'mistralAotApi', required: true,
-        displayOptions: { hide: {
-          provider:    ['anthropic', 'openai', 'google', 'openrouter'],
-          providerMix: ['off', 'anthropic', 'openai', 'google', 'openrouter'],
-        } } },
-      { name: 'openRouterAotApi', required: true,
-        displayOptions: { hide: {
-          provider:    ['anthropic', 'openai', 'google', 'mistral'],
-          providerMix: ['off', 'anthropic', 'openai', 'google', 'mistral'],
-        } } },
+      // All 5 credentials always visible + optional. User attaches the one(s)
+      // matching their chosen Provider and (if enabled) Provider Mix decomposer.
+      // n8n 2.16 has bugs with displayOptions on duplicate credentials — avoid.
+      { name: 'anthropicAotApi',   required: false },
+      { name: 'openAiAotApi',      required: false },
+      { name: 'googleGeminiAotApi',required: false },
+      { name: 'mistralAotApi',     required: false },
+      { name: 'openRouterAotApi',  required: false },
     ],
 
     properties: [
@@ -332,7 +313,14 @@ export class AotHarness implements INodeType {
       if (enableMixedMode) {
         const dProvider = providerMix as ProviderId;
         const dModel    = (this.getNodeParameter('decomposerModel', i, '') as string) || DEFAULT_MODEL[dProvider];
-        decomposerConfig = await resolveCredentials(this, dProvider, dModel, maxTokens);
+        if (dProvider === provider) {
+          // Same provider → reuse credential, only swap model
+          decomposerConfig = { ...executorConfig, model: dModel };
+        } else {
+          // Different provider → fetch decomposer credential separately.
+          // User must have attached the matching credential in the node's UI.
+          decomposerConfig = await resolveCredentials(this, dProvider, dModel, maxTokens);
+        }
       }
 
       let harnessResult: HarnessResult;
