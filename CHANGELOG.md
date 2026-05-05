@@ -5,6 +5,36 @@ Format inspired by [Keep a Changelog](https://keepachangelog.com/), versioning i
 
 ---
 
+## [0.5.0] — 2026-05-05 — Process Analyst Worker
+
+### Added — n8n node
+
+- **New mode** `Process Analyst` on the existing `AoT Harness` node. Single-call structured triage of one operational case (email, support ticket, document excerpt, workshop / car-dealership service request, internal note). Returns a deterministic JSON payload that downstream Switch / Gmail / Supabase nodes can branch on.
+- `nodes/AotHarness/process-analyst.ts` — profile-aware prompt builder (`PROCESS_ANALYST_PROMPT`), strict-typed result interface (`ProcessAnalysisResult`), deterministic post-processor (`applyHumanReviewLogic`), and parser-error fallback (`emptyAnalysis`).
+- 4 process profiles selectable in the UI:
+  - `generic` — branch-neutral operational case
+  - `email_support` — customer email / support ticket triage
+  - `document_intake` — inbound forms / documents
+  - `automotive_service` — workshop / car-dealership / service request (the showcase use-case for the DIGISTAFF positioning)
+- 6 new node parameters (only visible in `Process Analyst` mode): `analysisInput` (required), `processProfile`, `outputLanguage`, `humanReviewThreshold` (default `0.7`), `includeDraftResponse` (default `true`), `strictJson` (default `true`).
+- **Deterministic Human-Review gate.** `human_review_required` is forced `true` whenever (a) confidence < threshold, (b) `missing_information` is non-empty, (c) any `risk_flags` are present, or (d) the input is shorter than 20 characters. The triggers that fired are returned in `_trigger_reasons` for explainability.
+- **Read-only by design.** The worker classifies, scores, drafts a reply, and recommends a next step — but never sends, mutates or finalizes anything. Human-in-the-Loop is part of the contract.
+- README — new section *🛠️ Process Analyst Worker* with parameter table, full automotive-service example, output JSON, profile cheatsheet, and logic guarantees.
+
+### Changed
+
+- `n8n-node/package.json` — version `0.5.0`, description updated, new keywords (`process-analyst`, `process-automation`, `email-triage`, `document-intake`, `automotive-service`, `workshop`).
+
+### Backward compatibility
+
+- **Fully additive.** Existing `chip`, `aot`, and `webhook` modes are unchanged. No credential changes. Existing workflows continue to run without modification — `Process Analyst` is just a new fourth mode in the dropdown.
+
+### Strategic context
+
+v0.4.0 broadened *memory* coverage. v0.5.0 broadens *operational reach*: most n8n self-hosters use the platform to triage inbound work, not to run agentic reasoning loops. The Process Analyst Worker meets them where the volume actually is — emails, documents, service requests — and turns the harness into a directly useful intake tool rather than just an agent framework. The `automotive_service` profile is intentional: it's the showcase profile for the DIGISTAFF positioning around real operational processes in the German Mittelstand (workshop, car dealership, service-Annahme).
+
+---
+
 ## [0.4.0] — 2026-04-18 — Pluggable Vaults + Human-in-the-Loop
 
 ### Added — Python core
@@ -114,6 +144,7 @@ Anthropic-only locked out a majority of n8n self-hosters (existing OpenAI/Gemini
 
 ---
 
+[0.5.0]: https://github.com/ronnyschumann1983-boop/aot-harness/releases/tag/v0.5.0
 [0.4.0]: https://github.com/ronnyschumann1983-boop/aot-harness/releases/tag/v0.4.0
 [0.3.0]: https://github.com/ronnyschumann1983-boop/aot-harness/releases/tag/v0.3.0
 [0.2.2]: https://github.com/ronnyschumann1983-boop/aot-harness/releases/tag/v0.2.2

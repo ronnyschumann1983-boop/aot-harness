@@ -28,6 +28,15 @@ import {
   LLMUsage,
 } from './llm.router';
 
+import {
+  PROCESS_ANALYST_PROMPT,
+  ProcessAnalysisResult,
+  ProcessProfile,
+  AnalysisLanguage,
+  applyHumanReviewLogic,
+  emptyAnalysis,
+} from './process-analyst';
+
 // ── Cost aggregator: tracks every LLM call within one node-execution item ────
 
 interface CostAggregate {
@@ -159,7 +168,8 @@ export class AotHarness implements INodeType {
         default:     '',
         required:    true,
         placeholder: 'Erstelle IDD-Dokumentation fuer Kunde Mustermann, 42J., Haftpflicht',
-        description: 'Was soll das System erledigen? Ein natuerlicher Satz genuegt.',
+        description: 'Was soll das System erledigen? Ein natuerlicher Satz genuegt. (Im Modus "Process Analyst" wird stattdessen "Operational Input" verwendet.)',
+        displayOptions: { hide: { mode: ['process_analyst'] } },
       },
       {
         displayName: 'Mode',
@@ -169,8 +179,72 @@ export class AotHarness implements INodeType {
           { name: 'CHIP + AoT (full)',    value: 'chip',    description: 'AoT decomposition + atom solving + QA' },
           { name: 'AoT only (fast)',       value: 'aot',     description: 'Just AoT decomposition without QA' },
           { name: 'Webhook (Python)',      value: 'webhook', description: 'Calls a running aot-harness Python server' },
+          { name: 'Process Analyst',       value: 'process_analyst', description: 'Analyze an operational case (email, document, service request) and return structured next-step JSON for the workflow' },
         ],
         default: 'chip',
+      },
+
+      // ── Process Analyst Worker (mode = process_analyst) ──────────────────
+      {
+        displayName: 'Operational Input',
+        name:        'analysisInput',
+        type:        'string',
+        typeOptions: { rows: 6 },
+        default:     '',
+        required:    true,
+        placeholder: 'Sehr geehrte Damen und Herren, mein Golf macht beim Bremsen Geraeusche. Koennen Sie naechste Woche einen Termin anbieten? Gruss, Max Mustermann',
+        description: 'The operational case to analyze: email, support ticket, document excerpt, workshop/service request, or internal note.',
+        displayOptions: { show: { mode: ['process_analyst'] } },
+      },
+      {
+        displayName: 'Process Profile',
+        name:        'processProfile',
+        type:        'options',
+        default:     'generic',
+        description: 'Profile that biases what the analyst pays attention to.',
+        options: [
+          { name: 'Generic',             value: 'generic',             description: 'Branch-neutral operational case' },
+          { name: 'Email / Support',     value: 'email_support',       description: 'Customer emails + support tickets' },
+          { name: 'Document Intake',     value: 'document_intake',     description: 'Inbound forms / documents / extracts' },
+          { name: 'Automotive Service',  value: 'automotive_service',  description: 'Workshop / car dealership / service request' },
+        ],
+        displayOptions: { show: { mode: ['process_analyst'] } },
+      },
+      {
+        displayName: 'Output Language',
+        name:        'outputLanguage',
+        type:        'options',
+        default:     'de',
+        options: [
+          { name: 'Deutsch', value: 'de' },
+          { name: 'English', value: 'en' },
+        ],
+        displayOptions: { show: { mode: ['process_analyst'] } },
+      },
+      {
+        displayName: 'Human Review Threshold',
+        name:        'humanReviewThreshold',
+        type:        'number',
+        typeOptions: { minValue: 0, maxValue: 1, numberStepSize: 0.05 },
+        default:     0.7,
+        description: 'Below this confidence (0–1) the analyst flags the case for human review. Missing information or risk flags also trigger review regardless of confidence.',
+        displayOptions: { show: { mode: ['process_analyst'] } },
+      },
+      {
+        displayName: 'Include Draft Response',
+        name:        'includeDraftResponse',
+        type:        'boolean',
+        default:     true,
+        description: 'Whether the analyst should produce a polite draft reply. The worker never sends — drafts are read-only.',
+        displayOptions: { show: { mode: ['process_analyst'] } },
+      },
+      {
+        displayName: 'Strict JSON',
+        name:        'strictJson',
+        type:        'boolean',
+        default:     true,
+        description: 'When enabled, parser falls back to a safe empty analysis (with human_review_required=true) if the model returns invalid JSON, instead of throwing.',
+        displayOptions: { show: { mode: ['process_analyst'] } },
       },
       {
         displayName: 'Webhook URL',
@@ -292,8 +366,81 @@ export class AotHarness implements INodeType {
     const results: INodeExecutionData[] = [];
 
     for (let i = 0; i < items.length; i++) {
+      const mode = this.getNodeParameter('mode', i) as string;
+
+      // ── Process Analyst Worker (mode = process_analyst) ──────────────────
+      // Single LLM call → structured operational analysis. Read-only by
+      // design: no decomposition, no QA loop, no decomposer/executor mix.
+      if (mode === 'process_analyst') {
+        const provider             = this.getNodeParameter('provider', i) as ProviderId;
+        const model                = this.getNodeParameter('model', i) as string;
+        const analysisInput        = (this.getNodeParameter('analysisInput', i) as string) ?? '';
+        const processProfile       = this.getNodeParameter('processProfile', i, 'generic') as ProcessProfile;
+        const outputLanguage       = this.getNodeParameter('outputLanguage', i, 'de') as AnalysisLanguage;
+        const humanReviewThreshold = this.getNodeParameter('humanReviewThreshold', i, 0.7) as number;
+        const includeDraftResponse = this.getNodeParameter('includeDraftResponse', i, true) as boolean;
+        const strictJson           = this.getNodeParameter('strictJson', i, true) as boolean;
+
+        const cost = newCostAggregate();
+        const analystConfig: LLMConfig = await resolveCredentials(this, provider, model, 1500);
+
+        const prompt = PROCESS_ANALYST_PROMPT(
+          analysisInput,
+          processProfile,
+          outputLanguage,
+          humanReviewThreshold,
+          includeDraftResponse,
+        );
+
+        let analysis: ProcessAnalysisResult;
+        let parserNote: string | null = null;
+
+        try {
+          const llmRes = await callLLM(this, analystConfig, prompt);
+          accumulate(cost, analystConfig, llmRes.usage);
+
+          const parsed = parseJson<Partial<ProcessAnalysisResult>>(llmRes.text, {} as Partial<ProcessAnalysisResult>);
+          if (!parsed || Object.keys(parsed).length === 0) {
+            if (strictJson) {
+              parserNote = 'analyst output was not valid JSON — falling back to safe empty analysis';
+              analysis = emptyAnalysis(processProfile, includeDraftResponse);
+            } else {
+              throw new Error('Process Analyst returned non-JSON output and strictJson is disabled.');
+            }
+          } else {
+            analysis = applyHumanReviewLogic(
+              parsed,
+              analysisInput.length,
+              humanReviewThreshold,
+              processProfile,
+              includeDraftResponse,
+            );
+          }
+        } catch (err) {
+          if (strictJson) {
+            parserNote = `analyst call failed: ${(err as Error).message}`;
+            analysis = emptyAnalysis(processProfile, includeDraftResponse);
+          } else {
+            throw err;
+          }
+        }
+
+        results.push({
+          json: {
+            mode:           'process_analyst',
+            profile:        processProfile,
+            analysis,
+            provider_used:  analystConfig.provider,
+            model_used:     analystConfig.model,
+            cost:           roundCost(cost),
+            ...(parserNote ? { parser_note: parserNote } : {}),
+          },
+        });
+        continue;
+      }
+
+      // ── CHIP / AoT / Webhook modes ───────────────────────────────────────
       const goal        = this.getNodeParameter('goal', i) as string;
-      const mode        = this.getNodeParameter('mode', i) as string;
       const provider    = this.getNodeParameter('provider', i) as ProviderId;
       const model       = this.getNodeParameter('model', i) as string;
       const providerMix = this.getNodeParameter('providerMix', i, 'off') as string;
