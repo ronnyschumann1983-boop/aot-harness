@@ -5,6 +5,22 @@ Format inspired by [Keep a Changelog](https://keepachangelog.com/), versioning i
 
 ---
 
+## [0.5.1] — 2026-05-05 — Process Analyst Hardening
+
+### Fixed — n8n node
+
+- **Required-on-hidden-field bug.** The `Goal (Task)` field was `required: true` but hidden via `displayOptions.hide` in `process_analyst` mode. n8n 2.16 still enforces required validation on hidden fields, which could block the workflow from saving in the new mode. `required: true` removed from `Goal`; goal validation now happens explicitly in `execute()` for the `chip`/`aot`/`webhook` modes only, with a clear error message guiding the user.
+- **`maxTokens` for the analyst was hardcoded at 1500.** Long inputs (>3–4k characters) could truncate `draft_response`. Replaced with a dynamic budget that scales with input length: `min(4096, max(1500, ceil(input/4) × 2 + 800))`. Stays inside provider safety limits, lifts the cap exactly when needed.
+- **Empty `analysisInput`.** The worker would happily make a billable LLM call on an empty input; now throws a clear error before any provider call.
+- **`humanReviewThreshold` clamping.** Defensively clamped to `[0, 1]` in `execute()` to absorb out-of-range values from external workflow data sources.
+- **Privacy hint** added to the `Operational Input` field description: input text is sent verbatim to the LLM provider; users handling personal data should pick the EU-hosted Mistral provider.
+
+### Backward compatibility
+
+- No breaking changes. v0.5.0 callers continue to work. The fixes only tighten the validation surface and improve token-budget behavior.
+
+---
+
 ## [0.5.0] — 2026-05-05 — Process Analyst Worker
 
 ### Added — n8n node
@@ -144,6 +160,7 @@ Anthropic-only locked out a majority of n8n self-hosters (existing OpenAI/Gemini
 
 ---
 
+[0.5.1]: https://github.com/ronnyschumann1983-boop/aot-harness/releases/tag/v0.5.1
 [0.5.0]: https://github.com/ronnyschumann1983-boop/aot-harness/releases/tag/v0.5.0
 [0.4.0]: https://github.com/ronnyschumann1983-boop/aot-harness/releases/tag/v0.4.0
 [0.3.0]: https://github.com/ronnyschumann1983-boop/aot-harness/releases/tag/v0.3.0

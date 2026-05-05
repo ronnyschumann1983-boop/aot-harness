@@ -160,13 +160,15 @@ export class AotHarness implements INodeType {
       },
 
       // ── Goal ──────────────────────────────────────────────────────────────
+      // Required validation is handled in execute() because n8n 2.16 still
+      // enforces required=true on hidden fields; we only need a goal for the
+      // chip/aot/webhook modes, not for process_analyst.
       {
         displayName: 'Goal (Task)',
         name:        'goal',
         type:        'string',
         typeOptions: { rows: 3 },
         default:     '',
-        required:    true,
         placeholder: 'Erstelle IDD-Dokumentation fuer Kunde Mustermann, 42J., Haftpflicht',
         description: 'Was soll das System erledigen? Ein natuerlicher Satz genuegt. (Im Modus "Process Analyst" wird stattdessen "Operational Input" verwendet.)',
         displayOptions: { hide: { mode: ['process_analyst'] } },
@@ -193,7 +195,7 @@ export class AotHarness implements INodeType {
         default:     '',
         required:    true,
         placeholder: 'Sehr geehrte Damen und Herren, mein Golf macht beim Bremsen Geraeusche. Koennen Sie naechste Woche einen Termin anbieten? Gruss, Max Mustermann',
-        description: 'The operational case to analyze: email, support ticket, document excerpt, workshop/service request, or internal note.',
+        description: 'The operational case to analyze: email, support ticket, document excerpt, workshop/service request, or internal note. Note: this text is sent verbatim to the chosen LLM provider — pick "Mistral (EU)" if the input contains personal data subject to GDPR.',
         displayOptions: { show: { mode: ['process_analyst'] } },
       },
       {
@@ -377,12 +379,26 @@ export class AotHarness implements INodeType {
         const analysisInput        = (this.getNodeParameter('analysisInput', i) as string) ?? '';
         const processProfile       = this.getNodeParameter('processProfile', i, 'generic') as ProcessProfile;
         const outputLanguage       = this.getNodeParameter('outputLanguage', i, 'de') as AnalysisLanguage;
-        const humanReviewThreshold = this.getNodeParameter('humanReviewThreshold', i, 0.7) as number;
+        const humanReviewThresholdRaw = this.getNodeParameter('humanReviewThreshold', i, 0.7) as number;
+        const humanReviewThreshold = Math.min(1, Math.max(0, humanReviewThresholdRaw));
         const includeDraftResponse = this.getNodeParameter('includeDraftResponse', i, true) as boolean;
         const strictJson           = this.getNodeParameter('strictJson', i, true) as boolean;
 
+        if (!analysisInput || analysisInput.trim().length === 0) {
+          throw new Error(
+            'AoT Harness Process Analyst: "Operational Input" is empty. Provide the email, document, support ticket or service request you want to analyze.',
+          );
+        }
+
         const cost = newCostAggregate();
-        const analystConfig: LLMConfig = await resolveCredentials(this, provider, model, 1500);
+        // Output budget scales with input size so long inputs don't truncate
+        // the draft_response. ~4 chars per token, allow 2× input size for the
+        // structured JSON envelope, clamped to a safe [1500, 4096] range.
+        const analystMaxTokens = Math.min(
+          4096,
+          Math.max(1500, Math.ceil((analysisInput.length / 4) * 2) + 800),
+        );
+        const analystConfig: LLMConfig = await resolveCredentials(this, provider, model, analystMaxTokens);
 
         const prompt = PROCESS_ANALYST_PROMPT(
           analysisInput,
@@ -441,6 +457,12 @@ export class AotHarness implements INodeType {
 
       // ── CHIP / AoT / Webhook modes ───────────────────────────────────────
       const goal        = this.getNodeParameter('goal', i) as string;
+      if (!goal || goal.trim().length === 0) {
+        throw new Error(
+          `AoT Harness: "Goal (Task)" is required for mode "${mode}". ` +
+          `Either fill in the Goal field, or switch the node to mode "Process Analyst" and use the "Operational Input" field instead.`,
+        );
+      }
       const provider    = this.getNodeParameter('provider', i) as ProviderId;
       const model       = this.getNodeParameter('model', i) as string;
       const providerMix = this.getNodeParameter('providerMix', i, 'off') as string;
