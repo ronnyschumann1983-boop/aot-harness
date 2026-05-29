@@ -170,3 +170,9 @@ python -m aot_harness.examples.chip_idd_demo
 ## License
 
 MIT
+
+---
+
+## About
+
+`aot-harness` is built and maintained by **[DIGISTAFF](https://www.digistaff.de)** — AI automation and agent systems for German SMEs, focused on car dealerships and workshops. More at [digistaff.de](https://www.digistaff.de).
